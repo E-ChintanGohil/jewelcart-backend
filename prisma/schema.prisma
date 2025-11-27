@@ -1,0 +1,531 @@
+// JewelCart E-commerce Database Schema
+// Prisma schema file for jewelry e-commerce platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================
+// USERS & AUTHENTICATION
+// ================================
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  role         UserRole  @default(STAFF)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLogin    DateTime? @map("last_login")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  auditLogs        AuditLog[]
+  stockMovements   StockMovement[]
+  orderStatusChanges OrderStatusHistory[]
+  priceChanges     MaterialPriceHistory[]
+  customerNotes    CustomerNote[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+
+  @@map("user_role")
+}
+
+// ================================
+// MATERIALS & PRICING SYSTEM
+// ================================
+
+model Material {
+  id        Int          @id @default(autoincrement())
+  name      String
+  type      MaterialType
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  karats   Karat[]
+  products Product[]
+
+  @@map("materials")
+}
+
+enum MaterialType {
+  GOLD
+  SILVER
+
+  @@map("material_type")
+}
+
+model Karat {
+  id           Int     @id @default(autoincrement())
+  materialId   Int     @map("material_id")
+  value        String  // '18K', '925 Sterling'
+  purity       Decimal @db.Decimal(5, 2) // 75.00, 92.50
+  pricePerGram Decimal @db.Decimal(10, 2) @map("price_per_gram")
+  isActive     Boolean @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  material     Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  products     Product[]
+  priceHistory MaterialPriceHistory[]
+
+  @@map("karats")
+}
+
+model MaterialPriceHistory {
+  id        Int      @id @default(autoincrement())
+  karatId   Int      @map("karat_id")
+  oldPrice  Decimal? @db.Decimal(10, 2) @map("old_price")
+  newPrice  Decimal  @db.Decimal(10, 2) @map("new_price")
+  changedBy Int      @map("changed_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  karat Karat @relation(fields: [karatId], references: [id])
+  user  User  @relation(fields: [changedBy], references: [id])
+
+  @@map("material_price_history")
+}
+
+// ================================
+// CATEGORIES
+// ================================
+
+model Category {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique
+  description String?        @db.Text
+  imageUrl    String?        @map("image_url")
+  status      CategoryStatus @default(ACTIVE)
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  products           Product[]
+  customerPreferences CustomerPreference[]
+
+  @@map("categories")
+}
+
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("category_status")
+}
+
+// ================================
+// PRODUCTS
+// ================================
+
+model Product {
+  id                Int     @id @default(autoincrement())
+  name              String
+  description       String? @db.Text
+  sku               String  @unique
+  categoryId        Int     @map("category_id")
+  materialId        Int     @map("material_id")
+  karatId           Int     @map("karat_id")
+  basePrice         Decimal @db.Decimal(10, 2) @map("base_price")
+  weight            Decimal @db.Decimal(8, 3) // Weight in grams
+  gemstone          String?
+  dimensions        String?
+  certification     String?
+  stockQuantity     Int     @default(0) @map("stock_quantity")
+  lowStockThreshold Int     @default(5) @map("low_stock_threshold")
+  isFeatured        Boolean @default(false) @map("is_featured")
+  isActive          Boolean @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  category       Category @relation(fields: [categoryId], references: [id])
+  material       Material @relation(fields: [materialId], references: [id])
+  karat          Karat    @relation(fields: [karatId], references: [id])
+  images         ProductImage[]
+  tags           ProductTag[]
+  pricingTiers   ProductPricingTier[]
+  stockMovements StockMovement[]
+  stockReservations StockReservation[]
+  orderItems     OrderItem[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  productId Int     @map("product_id")
+  imageUrl  String  @map("image_url")
+  altText   String? @map("alt_text")
+  sortOrder Int     @default(0) @map("sort_order")
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model ProductTag {
+  id        Int    @id @default(autoincrement())
+  productId Int    @map("product_id")
+  tag       String
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_tags")
+}
+
+model ProductPricingTier {
+  id                 Int     @id @default(autoincrement())
+  productId          Int     @map("product_id")
+  minQuantity        Int     @map("min_quantity")
+  maxQuantity        Int?    @map("max_quantity")
+  discountPercentage Decimal @db.Decimal(5, 2) @map("discount_percentage")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_pricing_tiers")
+}
+
+// ================================
+// CUSTOMERS & ADDRESSES
+// ================================
+
+model Customer {
+  id           Int            @id @default(autoincrement())
+  firstName    String         @map("first_name")
+  lastName     String         @map("last_name")
+  email        String         @unique
+  passwordHash String?        @map("password_hash")
+  phone        String?
+  dateOfBirth  DateTime?      @map("date_of_birth") @db.Date
+  leadSource   String?        @map("lead_source")
+  status       CustomerStatus @default(LEAD)
+  totalSpent   Decimal        @default(0) @db.Decimal(12, 2) @map("total_spent")
+  orderCount   Int            @default(0) @map("order_count")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  addresses        CustomerAddress[]
+  notes            CustomerNote[]
+  preferences      CustomerPreference[]
+  orders           Order[]
+  stockReservations StockReservation[]
+
+  @@map("customers")
+}
+
+enum CustomerStatus {
+  LEAD
+  CUSTOMER
+  VIP
+
+  @@map("customer_status")
+}
+
+model CustomerAddress {
+  id          Int         @id @default(autoincrement())
+  customerId  Int         @map("customer_id")
+  type        AddressType @default(HOME)
+  contactName String?     @map("contact_name")
+  street      String
+  city        String
+  state       String
+  zipCode     String      @map("zip_code")
+  country     String      @default("India")
+  phone       String?
+  isDefault   Boolean     @default(false) @map("is_default")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  billingOrders     Order[]  @relation("BillingAddress")
+  shippingOrders    Order[]  @relation("ShippingAddress")
+
+  @@map("customer_addresses")
+}
+
+enum AddressType {
+  HOME
+  WORK
+  OTHER
+
+  @@map("address_type")
+}
+
+model CustomerNote {
+  id         Int      @id @default(autoincrement())
+  customerId Int      @map("customer_id")
+  note       String   @db.Text
+  createdBy  Int      @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [createdBy], references: [id])
+
+  @@map("customer_notes")
+}
+
+model CustomerPreference {
+  id             Int     @id @default(autoincrement())
+  customerId     Int     @map("customer_id")
+  categoryId     Int     @map("category_id")
+  preferenceType String  @map("preference_type")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@map("customer_preferences")
+}
+
+// ================================
+// ORDERS & PAYMENTS
+// ================================
+
+model Order {
+  id                Int           @id @default(autoincrement())
+  orderNumber       String        @unique @map("order_number")
+  customerId        Int           @map("customer_id")
+  billingAddressId  Int           @map("billing_address_id")
+  shippingAddressId Int           @map("shipping_address_id")
+  subtotal          Decimal       @db.Decimal(12, 2)
+  taxAmount         Decimal       @default(0) @db.Decimal(10, 2) @map("tax_amount")
+  shippingAmount    Decimal       @default(0) @db.Decimal(10, 2) @map("shipping_amount")
+  discountAmount    Decimal       @default(0) @db.Decimal(10, 2) @map("discount_amount")
+  totalAmount       Decimal       @db.Decimal(12, 2) @map("total_amount")
+  status            OrderStatus   @default(PENDING)
+  paymentStatus     PaymentStatus @default(PENDING) @map("payment_status")
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  billingAddress  CustomerAddress      @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  shippingAddress CustomerAddress      @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  items           OrderItem[]
+  statusHistory   OrderStatusHistory[]
+  payments        Payment[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status")
+}
+
+model OrderItem {
+  id                       Int     @id @default(autoincrement())
+  orderId                  Int     @map("order_id")
+  productId                Int     @map("product_id")
+  productName              String  @map("product_name")
+  quantity                 Int
+  unitPrice                Decimal @db.Decimal(10, 2) @map("unit_price")
+  totalPrice               Decimal @db.Decimal(12, 2) @map("total_price")
+  appliedDiscountPercentage Decimal @default(0) @db.Decimal(5, 2) @map("applied_discount_percentage")
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id         Int      @id @default(autoincrement())
+  orderId    Int      @map("order_id")
+  fromStatus String?  @map("from_status")
+  toStatus   String   @map("to_status")
+  changedBy  Int      @map("changed_by")
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [changedBy], references: [id])
+
+  @@map("order_status_history")
+}
+
+model Payment {
+  id                Int           @id @default(autoincrement())
+  orderId           Int           @map("order_id")
+  paymentMethod     PaymentMethod @map("payment_method")
+  razorpayPaymentId String?       @map("razorpay_payment_id")
+  razorpayOrderId   String?       @map("razorpay_order_id")
+  amount            Decimal       @db.Decimal(12, 2)
+  status            PaymentStatus @default(PENDING)
+  paymentDate       DateTime?     @map("payment_date")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  CASH
+  BANK_TRANSFER
+
+  @@map("payment_method")
+}
+
+// ================================
+// INVENTORY MANAGEMENT
+// ================================
+
+model StockMovement {
+  id            Int               @id @default(autoincrement())
+  productId     Int               @map("product_id")
+  movementType  StockMovementType @map("movement_type")
+  quantityChange Int              @map("quantity_change")
+  referenceType String?           @map("reference_type")
+  referenceId   Int?              @map("reference_id")
+  reason        String?           @db.Text
+  performedBy   Int               @map("performed_by")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [performedBy], references: [id])
+
+  @@map("stock_movements")
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  DAMAGE
+  RETURN
+  RESERVED
+  RELEASED
+
+  @@map("stock_movement_type")
+}
+
+model StockReservation {
+  id         Int               @id @default(autoincrement())
+  productId  Int               @map("product_id")
+  customerId Int               @map("customer_id")
+  quantity   Int
+  expiresAt  DateTime          @map("expires_at")
+  status     ReservationStatus @default(ACTIVE)
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  product  Product  @relation(fields: [productId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("stock_reservations")
+}
+
+enum ReservationStatus {
+  ACTIVE
+  EXPIRED
+  FULFILLED
+  CANCELLED
+
+  @@map("reservation_status")
+}
+
+// ================================
+// AUDIT LOGS
+// ================================
+
+model AuditLog {
+  id         Int         @id @default(autoincrement())
+  tableName  String      @map("table_name")
+  recordId   Int         @map("record_id")
+  action     AuditAction
+  oldValues  Json?       @map("old_values")
+  newValues  Json?       @map("new_values")
+  changedBy  Int         @map("changed_by")
+  ipAddress  String?     @map("ip_address")
+  userAgent  String?     @db.Text @map("user_agent")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [changedBy], references: [id])
+
+  @@index([tableName, recordId])
+  @@index([changedBy])
+  @@map("audit_logs")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+
+  @@map("audit_action")
+}
+
+// ================================
+// SETTINGS
+// ================================
+
+model Setting {
+  id          Int       @id @default(autoincrement())
+  key         String    @unique
+  value       String    @db.Text
+  dataType    DataType  @default(STRING) @map("data_type")
+  description String?   @db.Text
+  updatedBy   Int?      @map("updated_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+enum DataType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+
+  @@map("data_type")
+}

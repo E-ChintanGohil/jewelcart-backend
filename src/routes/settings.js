@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 router.put('/', authenticateToken, requireStaff, [
   body('siteName').optional().trim().isLength({ min: 1 }).withMessage('Site name cannot be empty'),
   body('siteDescription').optional().trim(),
-  body('logo').optional().isURL().withMessage('Logo must be a valid URL'),
+  body('logo').optional({ values: 'falsy' }).isURL().withMessage('Logo must be a valid URL'),
   body('contactEmail').optional().isEmail().withMessage('Valid email is required'),
   body('contactPhone').optional().trim(),
   body('contactAddress').optional().trim(),
@@ -99,13 +99,17 @@ router.put('/', authenticateToken, requireStaff, [
 
     // If gold or silver prices changed, update all product prices
     if (goldPrice !== undefined || silverPrice !== undefined) {
-      await executeQuery(`
-        UPDATE products p
-        JOIN karats k ON p.karat_id = k.id
-        JOIN materials m ON k.material_id = m.id
-        SET p.calculated_price = ROUND(p.base_price + (k.price_per_gram * p.weight)),
-            p.updated_at = CURRENT_TIMESTAMP
-      `);
+      try {
+        await executeQuery(`
+          UPDATE products p
+          JOIN karats k ON p.karat_id = k.id
+          SET p.calculated_price = ROUND(p.base_price + (k.price_per_gram * COALESCE(p.weight, 0))),
+              p.updated_at = CURRENT_TIMESTAMP
+          WHERE p.karat_id IS NOT NULL
+        `);
+      } catch (priceErr) {
+        console.error('Product price recalculation failed:', priceErr);
+      }
     }
 
     const settings = await executeQuery('SELECT * FROM settings LIMIT 1');

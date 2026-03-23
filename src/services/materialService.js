@@ -311,7 +311,7 @@ class MaterialService {
 
         for (const karat of material.karats) {
           // Calculate new price based on purity
-          const newPrice = Math.round(basePrice * (parseFloat(karat.purity) / 99.9));
+          const newPrice = Math.round(basePrice * (parseFloat(karat.purity) / 100));
 
           await prisma.karat.update({
             where: { id: karat.id },

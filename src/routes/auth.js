@@ -1,8 +1,11 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import UserService from '../services/userService.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
+import prisma from '../config/prisma.js';
+import EmailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -61,12 +64,12 @@ router.post('/login', validateLogin, async (req, res) => {
     // Generate JWT
     const token = generateToken(user.id);
 
-    // Return user data (excluding password) and token
-    const { password: _, ...userWithoutPassword } = user;
+    // Return user data (excluding sensitive fields) and token
+    const { password: _p, password_hash: _ph, passwordHash: _phash, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
 
     res.json({
       message: 'Login successful',
-      user: userWithoutPassword,
+      user: safeUser,
       token
     });
   } catch (error) {
@@ -125,7 +128,8 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
+    const { password_hash: _ph, passwordHash: _phash, resetToken: _rt, resetTokenExpiry: _rte, ...safeUser } = user;
+    res.json({ user: safeUser });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user information' });
@@ -177,6 +181,79 @@ router.put('/change-password', authenticateToken, [
   }
 });
 
+// POST /api/auth/forgot-password
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+], async (req, res) => {
+  const genericResponse = { message: 'If that email is registered, a reset link has been sent.' };
+
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Valid email is required' });
+  }
+
+  try {
+    const { email } = req.body;
+    const user = await UserService.findByEmail(email);
+    if (!user) return res.json(genericResponse);
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: hashedToken, resetTokenExpiry: expiry },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}&type=staff`;
+    await EmailService.sendPasswordReset(user.email, user.firstName, resetUrl);
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.json(genericResponse);
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+  }
+
+  try {
+    const { token, password } = req.body;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetToken: hashedToken,
+        resetTokenExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    await UserService.update(user.id, { password });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: null, resetTokenExpiry: null },
+    });
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
 // GET /api/auth/users - Get all users (admin only)
 router.get('/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -197,7 +274,11 @@ router.get('/users', authenticateToken, requireAdmin, async (req, res) => {
 // GET /api/auth/stats - Get user statistics (admin only)
 router.get('/stats', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const stats = { total_users: users.length, active_users: users.filter(u => u.isActive).length };
+    const allUsers = await UserService.getAll({});
+    const stats = {
+      total_users: allUsers.length,
+      active_users: allUsers.filter(u => u.isActive).length,
+    };
     res.json({ stats });
   } catch (error) {
     console.error('Get user stats error:', error);

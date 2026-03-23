@@ -190,8 +190,7 @@ class OrderService {
         subtotal,
         taxAmount = 0,
         shippingAmount = 0,
-        discountAmount = 0,
-        totalAmount,
+        couponCode,
         notes
       } = orderData;
 
@@ -201,6 +200,31 @@ class OrderService {
 
       // Start transaction
       const result = await prisma.$transaction(async (tx) => {
+        // Validate and apply coupon if provided
+        let couponId = null;
+        let discountAmount = 0;
+        if (couponCode) {
+          const coupon = await tx.coupon.findFirst({
+            where: { code: couponCode.toUpperCase(), isActive: true },
+          });
+          if (coupon) {
+            const now = new Date();
+            const expired = coupon.expiresAt && coupon.expiresAt < now;
+            const maxed = coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses;
+            const sub = parseFloat(subtotal);
+            const meetsMin = !coupon.minOrderAmount || sub >= parseFloat(coupon.minOrderAmount);
+            if (!expired && !maxed && meetsMin) {
+              discountAmount = coupon.discountType === 'PERCENTAGE'
+                ? (sub * parseFloat(coupon.discountValue)) / 100
+                : Math.min(parseFloat(coupon.discountValue), sub);
+              couponId = coupon.id;
+              await tx.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } });
+            }
+          }
+        }
+
+        const finalTotal = parseFloat(subtotal) + parseFloat(taxAmount) + parseFloat(shippingAmount) - discountAmount;
+
         // Create order
         const order = await tx.order.create({
           data: {
@@ -211,8 +235,10 @@ class OrderService {
             subtotal: parseFloat(subtotal),
             taxAmount: parseFloat(taxAmount),
             shippingAmount: parseFloat(shippingAmount),
-            discountAmount: parseFloat(discountAmount),
-            totalAmount: parseFloat(totalAmount),
+            discountAmount,
+            totalAmount: finalTotal,
+            couponId,
+            couponCode: couponId ? couponCode.toUpperCase() : null,
             notes
           }
         });
@@ -292,7 +318,7 @@ class OrderService {
           where: { id: parseInt(customerId) },
           data: {
             totalSpent: {
-              increment: parseFloat(totalAmount)
+              increment: parseFloat(finalTotal)
             },
             orderCount: {
               increment: 1

@@ -20,12 +20,13 @@ import settingsRoutes from './routes/settings.js';
 import userPreferencesRoutes from './routes/userPreferences.js';
 import paymentRoutes from './routes/payments.js';
 import uploadRoutes from './routes/upload.js';
+import couponRoutes from './routes/coupons.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Security middleware - configure helmet to allow images from same origin
 app.use(helmet({
@@ -35,7 +36,7 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100,
   message: 'Too many requests from this IP, please try again later.',
 });
 app.use('/api/', limiter);
@@ -43,6 +44,8 @@ app.use('/api/', limiter);
 // CORS configuration
 app.use(cors({
   origin: [
+    'http://localhost:5010',
+    'http://localhost:5000',
     'http://localhost:8080',
     'http://localhost:8081',
     'http://localhost:8082',
@@ -90,6 +93,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/user-preferences', userPreferencesRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/coupons', couponRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

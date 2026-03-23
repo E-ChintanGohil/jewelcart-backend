@@ -18,7 +18,7 @@ router.get('/', authenticateToken, async (req, res) => {
     // If no preferences exist, create default ones
     if (preferences.length === 0) {
       await executeQuery(
-        `INSERT INTO user_preferences (user_id) VALUES (?)`,
+        `INSERT INTO user_preferences (user_id, updated_at) VALUES (?, NOW())`,
         [userId]
       );
 

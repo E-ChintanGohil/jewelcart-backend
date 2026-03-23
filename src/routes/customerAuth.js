@@ -1,8 +1,10 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import prisma from '../config/prisma.js';
+import EmailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -67,13 +69,13 @@ router.post('/register', validateCustomerRegister, async (req, res) => {
     // Generate token
     const token = generateCustomerToken(customer.id);
 
-    // Return customer data (excluding password) and token
-    const { passwordHash: _, ...customerWithoutPassword } = customer;
+    // Return customer data (excluding sensitive fields) and token
+    const { passwordHash: _, resetToken: _rt, resetTokenExpiry: _rte, ...safeCustomer } = customer;
 
     res.status(201).json({
       message: 'Registration successful',
       user: {
-        ...customerWithoutPassword,
+        ...safeCustomer,
         role: 'customer',
         first_name: customer.firstName,
         last_name: customer.lastName
@@ -117,13 +119,13 @@ router.post('/login', validateCustomerLogin, async (req, res) => {
     // Generate token
     const token = generateCustomerToken(customer.id);
 
-    // Return customer data (excluding password) and token
-    const { passwordHash: _, ...customerWithoutPassword } = customer;
+    // Return customer data (excluding sensitive fields) and token
+    const { passwordHash: _, resetToken: _rt, resetTokenExpiry: _rte, ...safeCustomer } = customer;
 
     res.json({
       message: 'Login successful',
       user: {
-        ...customerWithoutPassword,
+        ...safeCustomer,
         role: 'customer',
         first_name: customer.firstName,
         last_name: customer.lastName
@@ -240,11 +242,85 @@ router.post('/addresses', authenticateCustomer, [
   }
 });
 
+// POST /api/customer-auth/forgot-password
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+], async (req, res) => {
+  // Always return 200 so we don't reveal whether the email exists
+  const genericResponse = { message: 'If that email is registered, a reset link has been sent.' };
+
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Valid email is required' });
+  }
+
+  try {
+    const { email } = req.body;
+    const customer = await prisma.customer.findUnique({ where: { email } });
+    if (!customer) return res.json(genericResponse);
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { resetToken: hashedToken, resetTokenExpiry: expiry },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}&type=customer`;
+    await EmailService.sendPasswordReset(customer.email, customer.firstName, resetUrl);
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Customer forgot password error:', error);
+    res.json(genericResponse); // still 200
+  }
+});
+
+// POST /api/customer-auth/reset-password
+router.post('/reset-password', [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+  }
+
+  try {
+    const { token, password } = req.body;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const customer = await prisma.customer.findFirst({
+      where: {
+        resetToken: hashedToken,
+        resetTokenExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!customer) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiry: null },
+    });
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Customer reset password error:', error);
+    res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
 // GET /api/customer-auth/me
 router.get('/me', authenticateCustomer, async (req, res) => {
   try {
-    const { passwordHash: _, ...customerWithoutPassword } = req.customer;
-    
+    const { passwordHash: _, resetToken: _rt, resetTokenExpiry: _rte, ...safeCustomer } = req.customer;
+
     // Fetch addresses
     const addresses = await prisma.customerAddress.findMany({
       where: { customerId: req.customer.id },
@@ -253,7 +329,7 @@ router.get('/me', authenticateCustomer, async (req, res) => {
 
     res.json({
       user: {
-        ...customerWithoutPassword,
+        ...safeCustomer,
         role: 'customer',
         first_name: req.customer.firstName,
         last_name: req.customer.lastName,

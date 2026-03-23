@@ -2,6 +2,7 @@ import express from 'express';
 import { body, param, validationResult } from 'express-validator';
 import OrderService from '../services/orderService.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
+import EmailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -99,6 +100,15 @@ router.put('/:id/status', authenticateToken, requireStaff, [
     }
 
     const order = await OrderService.updateStatus(req.params.id, req.body, req.user?.id);
+
+    // Send status update email if status changed (fire-and-forget)
+    if (req.body.status && order.customerInfo) {
+      EmailService.sendOrderStatusUpdate(
+        { firstName: order.customerInfo.firstName, email: order.customerInfo.email },
+        order,
+        req.body.status.toUpperCase()
+      ).catch(() => {});
+    }
 
     res.json({
       message: 'Order status updated successfully',

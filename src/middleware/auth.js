@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import UserService from '../services/userService.js';
+import { executeQuery } from '../config/database.js';
 
 // Verify JWT token
 export const authenticateToken = async (req, res, next) => {

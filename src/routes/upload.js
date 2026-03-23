@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import prisma from '../config/prisma.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireStaff } from '../middleware/auth.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -347,6 +347,39 @@ router.put('/product/:productId/image/primary', authenticateToken, async (req, r
       error: 'Failed to set primary image',
       details: error.message
     });
+  }
+});
+
+// General purpose image upload (for content, etc.)
+const generalUploadsDir = path.join(__dirname, '../../uploads/general');
+if (!fs.existsSync(generalUploadsDir)) {
+  fs.mkdirSync(generalUploadsDir, { recursive: true });
+}
+
+const generalStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, generalUploadsDir),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `upload-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const generalUpload = multer({
+  storage: generalStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: fileFilter
+});
+
+router.post('/general', authenticateToken, requireStaff, generalUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+    const imageUrl = `/uploads/general/${req.file.filename}`;
+    res.json({ success: true, imageUrl });
+  } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: 'Failed to upload image', details: error.message });
   }
 });
 

@@ -1,7 +1,22 @@
 import express from 'express';
 import { body, param, validationResult } from 'express-validator';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import CategoryService from '../services/categoryService.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'uploads/categories';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `category-${Date.now()}${path.extname(file.originalname)}`);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -55,7 +70,7 @@ router.get('/:id', [
 router.post('/', authenticateToken, requireStaff, [
   body('name').trim().isLength({ min: 1 }).withMessage('Category name is required'),
   body('description').optional().trim(),
-  body('imageUrl').optional().isURL().withMessage('Image URL must be valid'),
+  body('imageUrl').optional({ values: 'falsy' }).isURL().withMessage('Image URL must be valid'),
   body('status').optional().isIn(['ACTIVE', 'INACTIVE']).withMessage('Invalid status'),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer')
 ], async (req, res) => {
@@ -98,7 +113,7 @@ router.put('/:id', authenticateToken, requireStaff, [
   param('id').isInt({ min: 1 }).withMessage('Valid category ID is required'),
   body('name').optional().trim().isLength({ min: 1 }).withMessage('Category name cannot be empty'),
   body('description').optional().trim(),
-  body('imageUrl').optional().isURL().withMessage('Image URL must be valid'),
+  body('imageUrl').optional({ values: 'falsy' }).isURL().withMessage('Image URL must be valid'),
   body('status').optional().isIn(['ACTIVE', 'INACTIVE']).withMessage('Invalid status'),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer')
 ], async (req, res) => {
@@ -170,6 +185,21 @@ router.delete('/:id', authenticateToken, requireStaff, [
     }
 
     res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
+// POST /api/categories/:id/image — upload category image
+router.post('/:id/image', authenticateToken, requireStaff, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+    const imageUrl = `/uploads/categories/${req.file.filename}`;
+    const category = await CategoryService.update(parseInt(req.params.id), { imageUrl });
+    res.json({ message: 'Image uploaded successfully', imageUrl, category });
+  } catch (error) {
+    console.error('Category image upload error:', error);
+    res.status(500).json({ error: 'Failed to upload image' });
   }
 });
 

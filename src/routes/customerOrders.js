@@ -2,6 +2,7 @@ import express from 'express';
 import { param, validationResult } from 'express-validator';
 import OrderService from '../services/orderService.js';
 import { authenticateCustomer } from './customerAuth.js';
+import EmailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -66,6 +67,9 @@ router.post('/', authenticateCustomer, async (req, res) => {
     };
 
     const order = await OrderService.create(orderData);
+
+    // Send order confirmation email (fire-and-forget)
+    EmailService.sendOrderConfirmation(req.customer, order).catch(() => {});
 
     res.status(201).json({
       message: 'Order created successfully',

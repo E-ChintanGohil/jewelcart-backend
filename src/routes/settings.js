@@ -97,20 +97,9 @@ router.put('/', authenticateToken, requireStaff, [
       return res.status(404).json({ error: 'Settings not found' });
     }
 
-    // If gold or silver prices changed, update all product prices
-    if (goldPrice !== undefined || silverPrice !== undefined) {
-      try {
-        await executeQuery(`
-          UPDATE products p
-          JOIN karats k ON p.karat_id = k.id
-          SET p.calculated_price = ROUND(p.base_price + (k.price_per_gram * COALESCE(p.weight, 0))),
-              p.updated_at = CURRENT_TIMESTAMP
-          WHERE p.karat_id IS NOT NULL
-        `);
-      } catch (priceErr) {
-        console.error('Product price recalculation failed:', priceErr);
-      }
-    }
+    // Note: Product prices are calculated at runtime (base_price + karat.price_per_gram × weight).
+    // When gold/silver base prices change, the frontend calls /api/materials/update-prices
+    // which updates karat price_per_gram values — no product table update needed.
 
     const settings = await executeQuery('SELECT * FROM settings LIMIT 1');
     const setting = settings[0];

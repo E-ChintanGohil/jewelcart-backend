@@ -2,6 +2,8 @@ import prisma from '../config/prisma.js';
 import SKUService from './skuService.js';
 
 class ProductService {
+  // basePrice is now "making charge per gram"
+  // Formula: (pricePerGram + makingChargePerGram) × weight
   static async calculatePrice(materialId, karatId, weight, basePrice = 0) {
     try {
       const karat = await prisma.karat.findFirst({
@@ -11,15 +13,18 @@ class ProductService {
         }
       });
 
+      const w = parseFloat(weight) || 0;
+      const makingChargePerGram = parseFloat(basePrice) || 0;
+
       if (!karat) {
-        return basePrice;
+        return Math.round(makingChargePerGram * w);
       }
 
-      const materialCost = parseFloat(karat.pricePerGram) * parseFloat(weight);
-      return Math.round(materialCost + parseFloat(basePrice));
+      const pricePerGram = parseFloat(karat.pricePerGram);
+      return Math.round((pricePerGram + makingChargePerGram) * w);
     } catch (error) {
       console.error('Price calculation error:', error);
-      return basePrice;
+      return Math.round((parseFloat(basePrice) || 0) * (parseFloat(weight) || 0));
     }
   }
 

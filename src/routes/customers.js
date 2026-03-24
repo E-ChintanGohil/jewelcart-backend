@@ -1,6 +1,7 @@
 import express from 'express';
 import { body, param, validationResult } from 'express-validator';
 import CustomerService from '../services/customerService.js';
+import prisma from '../config/prisma.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -21,6 +22,60 @@ router.get('/', authenticateToken, requireStaff, async (req, res) => {
   } catch (error) {
     console.error('Get customers error:', error);
     res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+// GET /api/customers/export - Export customers as CSV (staff only)
+router.get('/export', authenticateToken, requireStaff, async (req, res) => {
+  try {
+    const customers = await prisma.customer.findMany({
+      include: {
+        orders: {
+          select: {
+            totalAmount: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const escapeCsvField = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const headers = ['Name', 'Email', 'Phone', 'Total Orders', 'Total Spent', 'Joined Date'];
+    const rows = customers.map(customer => {
+      const name = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
+      const totalOrders = customer.orders ? customer.orders.length : 0;
+      const totalSpent = customer.orders
+        ? customer.orders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0).toFixed(2)
+        : '0.00';
+      const joinedDate = customer.createdAt ? new Date(customer.createdAt).toISOString().split('T')[0] : '';
+
+      return [
+        name,
+        customer.email || '',
+        customer.phone || '',
+        totalOrders,
+        totalSpent,
+        joinedDate,
+      ].map(escapeCsvField).join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const today = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="customers-${today}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Export customers error:', error);
+    res.status(500).json({ error: 'Failed to export customers' });
   }
 });
 

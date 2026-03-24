@@ -1,27 +1,81 @@
 import nodemailer from 'nodemailer';
+import { executeQuery } from '../config/database.js';
 
-const isConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+// ─── SMTP config cache (5-minute TTL) ────────────────────────────────────────
+let cachedConfig = null;
+let cacheExpiry = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-const transporter = isConfigured
-  ? nodemailer.createTransport({
+const getSmtpConfig = async () => {
+  const now = Date.now();
+  if (cachedConfig && now < cacheExpiry) {
+    return cachedConfig;
+  }
+
+  try {
+    const rows = await executeQuery(
+      'SELECT smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_email, smtp_from_name, smtp_secure FROM settings LIMIT 1'
+    );
+
+    if (rows.length > 0 && rows[0].smtp_host && rows[0].smtp_user && rows[0].smtp_password) {
+      cachedConfig = {
+        host: rows[0].smtp_host,
+        port: rows[0].smtp_port || 587,
+        user: rows[0].smtp_user,
+        pass: rows[0].smtp_password,
+        fromEmail: rows[0].smtp_from_email || rows[0].smtp_user,
+        fromName: rows[0].smtp_from_name || 'JewelCart',
+        secure: !!rows[0].smtp_secure,
+      };
+      cacheExpiry = now + CACHE_TTL;
+      return cachedConfig;
+    }
+  } catch (error) {
+    console.error('[Email] Failed to load SMTP config from DB:', error.message);
+  }
+
+  // Fall back to env vars
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    cachedConfig = {
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT || '587'),
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+      fromEmail: process.env.SMTP_FROM || process.env.SMTP_USER,
+      fromName: 'JewelCart',
       secure: process.env.SMTP_PORT === '465',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    })
-  : null;
+    };
+    cacheExpiry = now + CACHE_TTL;
+    return cachedConfig;
+  }
+
+  cachedConfig = null;
+  cacheExpiry = now + CACHE_TTL;
+  return null;
+};
+
+const createTransporter = (config) => {
+  return nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: {
+      user: config.user,
+      pass: config.pass,
+    },
+  });
+};
 
 const send = async (to, subject, html) => {
-  if (!transporter) {
+  const config = await getSmtpConfig();
+  if (!config) {
     console.log(`[Email] SMTP not configured — skipping: "${subject}" to ${to}`);
     return;
   }
   try {
+    const transporter = createTransporter(config);
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      from: `"${config.fromName}" <${config.fromEmail}>`,
       to,
       subject,
       html,
@@ -33,7 +87,10 @@ const send = async (to, subject, html) => {
 };
 
 // ─── Shared layout ────────────────────────────────────────────────────────────
-const wrap = (body) => `
+const wrap = async (body) => {
+  const config = await getSmtpConfig();
+  const contactEmail = config?.fromEmail || '';
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -67,11 +124,12 @@ const wrap = (body) => `
     </div>
     <div class="footer">
       &copy; ${new Date().getFullYear()} JewelCart. All rights reserved.<br/>
-      Need help? Contact us at <a href="mailto:${process.env.SMTP_USER}" style="color:#B45309">${process.env.SMTP_USER}</a>
+      Need help? Contact us at <a href="mailto:${contactEmail}" style="color:#B45309">${contactEmail}</a>
     </div>
   </div>
 </body>
 </html>`;
+};
 
 const statusLabel = (status) => ({
   PENDING: 'Pending',
@@ -96,11 +154,49 @@ const statusColor = (status) => ({
 
 const EmailService = {
   /**
+   * Invalidate the SMTP config cache (call after settings update)
+   */
+  invalidateCache() {
+    cachedConfig = null;
+    cacheExpiry = 0;
+  },
+
+  /**
+   * Send a test email to verify SMTP configuration
+   */
+  async sendTestEmail(toEmail) {
+    const config = await getSmtpConfig();
+    if (!config) {
+      throw new Error('SMTP is not configured. Please save your SMTP settings first.');
+    }
+
+    const transporter = createTransporter(config);
+    const html = await wrap(`
+      <h2>SMTP Configuration Test</h2>
+      <p>This is a test email from your JewelCart store.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="info-label">SMTP Host</span><span class="info-value">${config.host}</span></div>
+        <div class="info-row"><span class="info-label">SMTP Port</span><span class="info-value">${config.port}</span></div>
+        <div class="info-row"><span class="info-label">From</span><span class="info-value">${config.fromName} &lt;${config.fromEmail}&gt;</span></div>
+        <div class="info-row"><span class="info-label">Sent At</span><span class="info-value">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span></div>
+      </div>
+      <p style="color:#065f46;font-weight:600">Your email configuration is working correctly!</p>
+    `);
+
+    await transporter.sendMail({
+      from: `"${config.fromName}" <${config.fromEmail}>`,
+      to: toEmail,
+      subject: 'JewelCart — SMTP Test Email',
+      html,
+    });
+  },
+
+  /**
    * Sent when a customer places an order (payment not yet confirmed)
    */
   async sendOrderConfirmation(customer, order) {
     const subject = `Order Confirmed — ${order.orderNumber}`;
-    const html = wrap(`
+    const html = await wrap(`
       <h2>Thank you for your order!</h2>
       <p>Hi ${customer.firstName},</p>
       <p>We've received your order and it's being processed. Here are your order details:</p>
@@ -136,7 +232,7 @@ const EmailService = {
 
     const message = statusMessages[newStatus] ?? `Your order status has been updated to ${label}.`;
 
-    const html = wrap(`
+    const html = await wrap(`
       <h2>Order Status Update</h2>
       <p>Hi ${customer.firstName},</p>
       <p>${message}</p>
@@ -155,7 +251,7 @@ const EmailService = {
    */
   async sendPaymentConfirmation(customer, order, paymentId) {
     const subject = `Payment Confirmed — ${order.orderNumber}`;
-    const html = wrap(`
+    const html = await wrap(`
       <h2>Payment Received</h2>
       <p>Hi ${customer.firstName},</p>
       <p>Your payment has been successfully processed. Your order is now confirmed.</p>
@@ -175,7 +271,7 @@ const EmailService = {
    */
   async sendPasswordReset(email, firstName, resetUrl) {
     const subject = 'Reset your JewelCart password';
-    const html = wrap(`
+    const html = await wrap(`
       <h2>Password Reset Request</h2>
       <p>Hi ${firstName},</p>
       <p>We received a request to reset your password. Click the button below to choose a new password. This link expires in <strong>1 hour</strong>.</p>

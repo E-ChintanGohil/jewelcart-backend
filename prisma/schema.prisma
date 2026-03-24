@@ -562,6 +562,13 @@ model SiteSetting {
   freeShippingThreshold Decimal  @default(5000) @db.Decimal(10, 2) @map("free_shipping_threshold")
   currency              String   @default("INR")
   paymentMethods        String?  @db.Text @map("payment_methods")
+  smtpHost              String?  @map("smtp_host")
+  smtpPort              Int?     @default(587) @map("smtp_port")
+  smtpUser              String?  @map("smtp_user")
+  smtpPassword          String?  @map("smtp_password")
+  smtpFromEmail         String?  @map("smtp_from_email")
+  smtpFromName          String?  @default("JewelCart") @map("smtp_from_name")
+  smtpSecure            Boolean  @default(false) @map("smtp_secure")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

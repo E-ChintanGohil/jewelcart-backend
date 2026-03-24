@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { executeQuery } from '../config/database.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
+import EmailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -41,7 +42,14 @@ router.put('/', authenticateToken, requireStaff, [
   body('shippingRate').optional().isFloat({ min: 0 }).withMessage('Shipping rate must be positive'),
   body('freeShippingThreshold').optional().isFloat({ min: 0 }).withMessage('Free shipping threshold must be positive'),
   body('currency').optional().isLength({ min: 3, max: 3 }).withMessage('Currency must be 3 characters'),
-  body('paymentMethods').optional().isArray().withMessage('Payment methods must be an array')
+  body('paymentMethods').optional().isArray().withMessage('Payment methods must be an array'),
+  body('smtpHost').optional({ values: 'falsy' }).trim(),
+  body('smtpPort').optional().isInt({ min: 1, max: 65535 }).withMessage('SMTP port must be between 1 and 65535'),
+  body('smtpUser').optional({ values: 'falsy' }).trim(),
+  body('smtpPassword').optional({ values: 'falsy' }).trim(),
+  body('smtpFromEmail').optional({ values: 'falsy' }).isEmail().withMessage('SMTP from email must be valid'),
+  body('smtpFromName').optional({ values: 'falsy' }).trim(),
+  body('smtpSecure').optional().isBoolean().withMessage('SMTP secure must be a boolean')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -55,7 +63,8 @@ router.put('/', authenticateToken, requireStaff, [
     const {
       siteName, siteDescription, logo, contactEmail, contactPhone, contactAddress,
       goldPrice, silverPrice, taxRate, shippingRate, freeShippingThreshold,
-      currency, paymentMethods
+      currency, paymentMethods,
+      smtpHost, smtpPort, smtpUser, smtpPassword, smtpFromEmail, smtpFromName, smtpSecure
     } = req.body;
 
     const setClause = [];
@@ -74,7 +83,14 @@ router.put('/', authenticateToken, requireStaff, [
       shipping_rate: shippingRate,
       free_shipping_threshold: freeShippingThreshold,
       currency,
-      payment_methods: paymentMethods ? JSON.stringify(paymentMethods) : undefined
+      payment_methods: paymentMethods ? JSON.stringify(paymentMethods) : undefined,
+      smtp_host: smtpHost,
+      smtp_port: smtpPort,
+      smtp_user: smtpUser,
+      smtp_password: smtpPassword,
+      smtp_from_email: smtpFromEmail,
+      smtp_from_name: smtpFromName,
+      smtp_secure: smtpSecure !== undefined ? (smtpSecure ? 1 : 0) : undefined
     };
 
     Object.entries(fieldsToUpdate).forEach(([key, value]) => {
@@ -97,6 +113,13 @@ router.put('/', authenticateToken, requireStaff, [
       return res.status(404).json({ error: 'Settings not found' });
     }
 
+    // Invalidate email service cache so it picks up new SMTP settings
+    const hasSmtpChange = smtpHost !== undefined || smtpPort !== undefined || smtpUser !== undefined ||
+      smtpPassword !== undefined || smtpFromEmail !== undefined || smtpFromName !== undefined || smtpSecure !== undefined;
+    if (hasSmtpChange) {
+      EmailService.invalidateCache();
+    }
+
     // Note: Product prices are calculated at runtime (base_price + karat.price_per_gram × weight).
     // When gold/silver base prices change, the frontend calls /api/materials/update-prices
     // which updates karat price_per_gram values — no product table update needed.
@@ -114,6 +137,25 @@ router.put('/', authenticateToken, requireStaff, [
   } catch (error) {
     console.error('Update settings error:', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// POST /api/settings/test-email - Send a test email (staff only)
+router.post('/test-email', authenticateToken, requireStaff, async (req, res) => {
+  try {
+    // Get the logged-in user's email
+    const users = await executeQuery('SELECT email FROM users WHERE id = ?', [req.user.userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const toEmail = users[0].email;
+    await EmailService.sendTestEmail(toEmail);
+
+    res.json({ message: `Test email sent successfully to ${toEmail}` });
+  } catch (error) {
+    console.error('Test email error:', error);
+    res.status(400).json({ error: error.message || 'Failed to send test email' });
   }
 });
 

@@ -26,6 +26,64 @@ router.get('/', authenticateToken, requireStaff, async (req, res) => {
   }
 });
 
+// GET /api/orders/export - Export orders as CSV (staff only)
+router.get('/export', authenticateToken, requireStaff, async (req, res) => {
+  try {
+    const orders = await OrderService.getAll({});
+
+    const escapeCsvField = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const headers = ['Order Number', 'Customer Name', 'Email', 'Items Count', 'Subtotal', 'Tax', 'Shipping', 'Discount', 'Total', 'Status', 'Payment Status', 'Date'];
+    const rows = orders.map(order => {
+      const customerName = order.customerInfo
+        ? `${order.customerInfo.firstName || ''} ${order.customerInfo.lastName || ''}`.trim()
+        : '';
+      const email = order.customerInfo?.email || '';
+      const itemsCount = order.items ? order.items.length : 0;
+      const subtotal = order.subtotal || 0;
+      const tax = order.taxAmount || 0;
+      const shipping = order.shippingAmount || 0;
+      const discount = order.discountAmount || 0;
+      const total = order.totalAmount || 0;
+      const status = order.status || '';
+      const paymentStatus = order.paymentStatus || '';
+      const date = order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '';
+
+      return [
+        order.orderNumber || order.id,
+        customerName,
+        email,
+        itemsCount,
+        subtotal,
+        tax,
+        shipping,
+        discount,
+        total,
+        status,
+        paymentStatus,
+        date,
+      ].map(escapeCsvField).join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const today = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="orders-${today}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Export orders error:', error);
+    res.status(500).json({ error: 'Failed to export orders' });
+  }
+});
+
 // GET /api/orders/:id - Get single order (staff only)
 router.get('/:id', authenticateToken, requireStaff, [
   param('id').isInt({ min: 1 }).withMessage('Valid order ID is required')

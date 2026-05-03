@@ -3,6 +3,7 @@ import { body, param, validationResult } from 'express-validator';
 import OrderService from '../services/orderService.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
 import EmailService from '../services/emailService.js';
+import { generateInvoicePDF } from '../services/invoiceService.js';
 
 const router = express.Router();
 
@@ -191,6 +192,22 @@ router.get('/stats', authenticateToken, requireStaff, async (req, res) => {
   } catch (error) {
     console.error('Get order stats error:', error);
     res.status(500).json({ error: 'Failed to fetch order statistics' });
+  }
+});
+
+// GET /api/orders/:id/invoice - Download invoice PDF (staff only)
+router.get('/:id/invoice', authenticateToken, requireStaff, async (req, res) => {
+  try {
+    const { pdfBuffer, orderNumber } = await generateInvoicePDF(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${orderNumber}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Invoice generation error:', error);
+    if (error.message === 'Order not found') {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    res.status(500).json({ error: 'Failed to generate invoice' });
   }
 });
 

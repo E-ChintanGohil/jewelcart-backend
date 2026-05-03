@@ -110,12 +110,13 @@ model MaterialPriceHistory {
 // ================================
 
 model Category {
-  id          Int            @id @default(autoincrement())
-  name        String         @unique
-  description String?        @db.Text
-  imageUrl    String?        @map("image_url")
-  status      CategoryStatus @default(ACTIVE)
-  sortOrder   Int            @default(0) @map("sort_order")
+  id              Int            @id @default(autoincrement())
+  name            String         @unique
+  description     String?        @db.Text
+  imageUrl        String?        @map("image_url")
+  status          CategoryStatus @default(ACTIVE)
+  sortOrder       Int            @default(0) @map("sort_order")
+  showOnHomepage  Boolean        @default(true) @map("show_on_homepage")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 

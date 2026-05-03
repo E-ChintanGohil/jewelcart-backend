@@ -3,6 +3,7 @@ import { param, validationResult } from 'express-validator';
 import OrderService from '../services/orderService.js';
 import { authenticateCustomer } from './customerAuth.js';
 import EmailService from '../services/emailService.js';
+import { generateInvoicePDF } from '../services/invoiceService.js';
 
 const router = express.Router();
 
@@ -78,6 +79,27 @@ router.post('/', authenticateCustomer, async (req, res) => {
   } catch (error) {
     console.error('Create customer order error:', error);
     res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+// GET /api/customer-orders/:id/invoice - Download invoice (own orders only)
+router.get('/:id/invoice', authenticateCustomer, async (req, res) => {
+  try {
+    const order = await OrderService.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    if (order.customerId !== req.customer.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { pdfBuffer, orderNumber } = await generateInvoicePDF(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${orderNumber}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Invoice generation error:', error);
+    res.status(500).json({ error: 'Failed to generate invoice' });
   }
 });
 

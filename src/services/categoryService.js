@@ -16,6 +16,10 @@ class CategoryService {
         ];
       }
 
+      if (filters.show_on_homepage !== undefined) {
+        where.showOnHomepage = filters.show_on_homepage === 'true' || filters.show_on_homepage === true;
+      }
+
       const categories = await prisma.category.findMany({
         where,
         orderBy: [
@@ -33,6 +37,8 @@ class CategoryService {
         status: category.status,
         sort_order: category.sortOrder,
         sortOrder: category.sortOrder,
+        showOnHomepage: category.showOnHomepage,
+        show_on_homepage: category.showOnHomepage,
         created_at: category.createdAt,
         updated_at: category.updatedAt,
         createdAt: category.createdAt,
@@ -61,6 +67,8 @@ class CategoryService {
         status: category.status,
         sort_order: category.sortOrder,
         sortOrder: category.sortOrder,
+        showOnHomepage: category.showOnHomepage,
+        show_on_homepage: category.showOnHomepage,
         created_at: category.createdAt,
         updated_at: category.updatedAt,
         createdAt: category.createdAt,
@@ -74,7 +82,7 @@ class CategoryService {
 
   static async create(categoryData) {
     try {
-      const { name, description, imageUrl, status = 'ACTIVE', sortOrder = 0 } = categoryData;
+      const { name, description, imageUrl, status = 'ACTIVE', sortOrder = 0, showOnHomepage = true } = categoryData;
 
       const category = await prisma.category.create({
         data: {
@@ -82,7 +90,8 @@ class CategoryService {
           description,
           imageUrl,
           status,
-          sortOrder: parseInt(sortOrder)
+          sortOrder: parseInt(sortOrder),
+          showOnHomepage: showOnHomepage === true || showOnHomepage === 'true'
         }
       });
 
@@ -95,6 +104,8 @@ class CategoryService {
         status: category.status,
         sort_order: category.sortOrder,
         sortOrder: category.sortOrder,
+        showOnHomepage: category.showOnHomepage,
+        show_on_homepage: category.showOnHomepage,
         created_at: category.createdAt,
         updated_at: category.updatedAt,
         createdAt: category.createdAt,
@@ -113,7 +124,7 @@ class CategoryService {
         throw new Error('Category not found');
       }
 
-      const { name, description, imageUrl, status, sortOrder } = updates;
+      const { name, description, imageUrl, status, sortOrder, showOnHomepage } = updates;
 
       const updateData = {};
       if (name !== undefined) updateData.name = name;
@@ -121,6 +132,7 @@ class CategoryService {
       if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
       if (status !== undefined) updateData.status = status;
       if (sortOrder !== undefined) updateData.sortOrder = parseInt(sortOrder);
+      if (showOnHomepage !== undefined) updateData.showOnHomepage = showOnHomepage === true || showOnHomepage === 'true';
 
       const updatedCategory = await prisma.category.update({
         where: { id: parseInt(id) },
@@ -136,6 +148,8 @@ class CategoryService {
         status: updatedCategory.status,
         sort_order: updatedCategory.sortOrder,
         sortOrder: updatedCategory.sortOrder,
+        showOnHomepage: updatedCategory.showOnHomepage,
+        show_on_homepage: updatedCategory.showOnHomepage,
         created_at: updatedCategory.createdAt,
         updated_at: updatedCategory.updatedAt,
         createdAt: updatedCategory.createdAt,

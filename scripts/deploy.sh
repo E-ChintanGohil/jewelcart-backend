@@ -65,14 +65,14 @@ echo
 SKIP_RESTART="${1:-}"
 RESTART_CMD=""
 if [[ "$SKIP_RESTART" != "--no-restart" ]]; then
-  RESTART_CMD="echo '→ Restarting pm2 ($PM2_NAME)…' && pm2 restart $PM2_NAME --update-env"
+  RESTART_CMD="echo '→ Restarting pm2 ($PM2_NAME)...' && pm2 restart $PM2_NAME --update-env"
 fi
 
 REMOTE_SCRIPT=$(cat <<EOF
 set -e
 cd $REMOTE_PATH
 
-echo "→ Fetching origin/$GIT_BRANCH…"
+echo "→ Fetching origin/$GIT_BRANCH..."
 git fetch origin $GIT_BRANCH
 
 REMOTE_BEFORE=\$(git rev-parse HEAD)

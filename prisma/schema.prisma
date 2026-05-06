@@ -155,6 +155,18 @@ model Product {
   lowStockThreshold Int     @default(5) @map("low_stock_threshold")
   isFeatured        Boolean @default(false) @map("is_featured")
   isActive          Boolean @default(true) @map("is_active")
+
+  // Phase 1: Color & Purity options
+  availableColors   Json?   @map("available_colors")   // e.g. ["yellow","white","rose"]
+  defaultColor      String? @map("default_color")      // e.g. "yellow"
+  availablePurities Json?   @map("available_purities") // e.g. ["18K","22K"] (karat values)
+  defaultPurity     String? @map("default_purity")     // e.g. "18K"
+
+  // Phase 2: Size selector
+  sizeMin           Int?    @map("size_min")
+  sizeMax           Int?    @map("size_max")
+  sizeUnit          String? @map("size_unit") // "ring" | "inch" | "cm"
+
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -168,8 +180,54 @@ model Product {
   stockMovements StockMovement[]
   stockReservations StockReservation[]
   orderItems     OrderItem[]
+  diamondDetails ProductDiamondDetail?
+  stoneDetails   ProductStoneDetail[]
+  priceBreakup   ProductPriceBreakup[]
 
   @@map("products")
+}
+
+// Phase 3: Diamond detail (one row per product)
+model ProductDiamondDetail {
+  id          Int     @id @default(autoincrement())
+  productId   Int     @unique @map("product_id")
+  shape       String?
+  count       Int?
+  totalWeight Decimal? @db.Decimal(8, 3) @map("total_weight") // carats
+  color       String?
+  clarity     String?
+  sizeRange   String?  @map("size_range")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_diamond_details")
+}
+
+// Phase 3: Other stones (multiple rows per product)
+model ProductStoneDetail {
+  id          Int     @id @default(autoincrement())
+  productId   Int     @map("product_id")
+  name        String
+  count       Int?
+  totalWeight Decimal? @db.Decimal(8, 3) @map("total_weight")
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_stone_details")
+}
+
+// Phase 4: Price breakup line items (multiple rows per product)
+model ProductPriceBreakup {
+  id        Int     @id @default(autoincrement())
+  productId Int     @map("product_id")
+  label     String  // e.g. "18Kt Gold (3.2g)"
+  amount    Decimal @db.Decimal(10, 2)
+  sortOrder Int     @default(0) @map("sort_order")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_price_breakup")
 }
 
 model ProductImage {

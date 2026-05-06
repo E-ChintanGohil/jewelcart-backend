@@ -1,6 +1,39 @@
 import prisma from '../config/prisma.js';
 import SKUService from './skuService.js';
 
+// ─── Helpers for new product fields ──────────────────────────────────────────
+const normalizeJsonArray = (value) => {
+  if (value == null || value === '') return null;
+  if (Array.isArray(value)) {
+    const cleaned = value.filter(v => v != null && v !== '');
+    return cleaned.length > 0 ? cleaned : null;
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeJsonArray(parsed);
+    } catch {
+      return value.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+  return null;
+};
+
+const parseIntOrNull = (v) => {
+  if (v == null || v === '') return null;
+  const n = parseInt(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const parseFloatOrNull = (v) => {
+  if (v == null || v === '') return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const hasDiamondData = (d) =>
+  !!(d && (d.shape || d.count != null || d.totalWeight != null || d.color || d.clarity || d.sizeRange));
+
 class ProductService {
   // basePrice is now "making charge per gram"
   // Formula: (pricePerGram + makingChargePerGram) × weight
@@ -39,11 +72,16 @@ class ProductService {
           images: {
             orderBy: { sortOrder: 'asc' }
           },
-          tags: true
+          tags: true,
+          diamondDetails: true,
+          stoneDetails: { orderBy: { sortOrder: 'asc' } },
+          priceBreakup: { orderBy: { sortOrder: 'asc' } },
         }
       });
 
       if (!product) return null;
+
+      const calculatedPrice = await this.calculatePrice(product.materialId, product.karatId, product.weight, product.basePrice);
 
       return {
         id: product.id,
@@ -60,7 +98,7 @@ class ProductService {
         karat_value: product.karat.value,
         karat_purity: product.karat.purity,
         base_price: parseFloat(product.basePrice),
-        calculated_price: await this.calculatePrice(product.materialId, product.karatId, product.weight, product.basePrice),
+        calculated_price: calculatedPrice,
         weight: parseFloat(product.weight),
         gemstone: product.gemstone,
         dimensions: product.dimensions,
@@ -72,6 +110,66 @@ class ProductService {
         is_featured: product.isFeatured,
         is_active: product.isActive,
         isActive: product.isActive,
+
+        // Phase 1: color + purity
+        available_colors: product.availableColors || [],
+        availableColors: product.availableColors || [],
+        default_color: product.defaultColor,
+        defaultColor: product.defaultColor,
+        available_purities: product.availablePurities || [],
+        availablePurities: product.availablePurities || [],
+        default_purity: product.defaultPurity,
+        defaultPurity: product.defaultPurity,
+
+        // Phase 2: size
+        size_min: product.sizeMin,
+        sizeMin: product.sizeMin,
+        size_max: product.sizeMax,
+        sizeMax: product.sizeMax,
+        size_unit: product.sizeUnit,
+        sizeUnit: product.sizeUnit,
+
+        // Phase 3: diamond / stones
+        diamond_details: product.diamondDetails ? {
+          shape: product.diamondDetails.shape,
+          count: product.diamondDetails.count,
+          total_weight: product.diamondDetails.totalWeight ? parseFloat(product.diamondDetails.totalWeight) : null,
+          totalWeight: product.diamondDetails.totalWeight ? parseFloat(product.diamondDetails.totalWeight) : null,
+          color: product.diamondDetails.color,
+          clarity: product.diamondDetails.clarity,
+          size_range: product.diamondDetails.sizeRange,
+          sizeRange: product.diamondDetails.sizeRange,
+        } : null,
+        diamondDetails: product.diamondDetails ? {
+          shape: product.diamondDetails.shape,
+          count: product.diamondDetails.count,
+          totalWeight: product.diamondDetails.totalWeight ? parseFloat(product.diamondDetails.totalWeight) : null,
+          color: product.diamondDetails.color,
+          clarity: product.diamondDetails.clarity,
+          sizeRange: product.diamondDetails.sizeRange,
+        } : null,
+        stone_details: product.stoneDetails.map(s => ({
+          name: s.name,
+          count: s.count,
+          total_weight: s.totalWeight ? parseFloat(s.totalWeight) : null,
+          totalWeight: s.totalWeight ? parseFloat(s.totalWeight) : null,
+        })),
+        stoneDetails: product.stoneDetails.map(s => ({
+          name: s.name,
+          count: s.count,
+          totalWeight: s.totalWeight ? parseFloat(s.totalWeight) : null,
+        })),
+
+        // Phase 4: price breakup
+        price_breakup: product.priceBreakup.map(b => ({
+          label: b.label,
+          amount: parseFloat(b.amount),
+        })),
+        priceBreakup: product.priceBreakup.map(b => ({
+          label: b.label,
+          amount: parseFloat(b.amount),
+        })),
+
         images: product.images.map(img => ({
           imageUrl: img.imageUrl,
           isPrimary: img.isPrimary,
@@ -83,7 +181,7 @@ class ProductService {
         updated_at: product.updatedAt,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt,
-        price: await this.calculatePrice(product.materialId, product.karatId, product.weight, product.basePrice)
+        price: calculatedPrice
       };
     } catch (error) {
       console.error('Find product by ID error:', error);
@@ -247,7 +345,15 @@ class ProductService {
       const {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured = false,
-        isActive = true, certification, images = [], tags = []
+        isActive = true, certification, images = [], tags = [],
+        // Phase 1
+        availableColors, defaultColor, availablePurities, defaultPurity,
+        // Phase 2
+        sizeMin, sizeMax, sizeUnit,
+        // Phase 3
+        diamondDetails, stoneDetails,
+        // Phase 4
+        priceBreakup,
       } = productData;
 
       // Generate SKU automatically
@@ -271,7 +377,14 @@ class ProductService {
             certification,
             stockQuantity: parseInt(stock),
             isFeatured: featured,
-            isActive
+            isActive,
+            availableColors: normalizeJsonArray(availableColors),
+            defaultColor: defaultColor || null,
+            availablePurities: normalizeJsonArray(availablePurities),
+            defaultPurity: defaultPurity || null,
+            sizeMin: sizeMin != null && sizeMin !== '' ? parseInt(sizeMin) : null,
+            sizeMax: sizeMax != null && sizeMax !== '' ? parseInt(sizeMax) : null,
+            sizeUnit: sizeUnit || null,
           }
         });
 
@@ -294,6 +407,50 @@ class ProductService {
               productId: product.id,
               tag
             }))
+          });
+        }
+
+        // Diamond details (single row)
+        if (diamondDetails && hasDiamondData(diamondDetails)) {
+          await tx.productDiamondDetail.create({
+            data: {
+              productId: product.id,
+              shape: diamondDetails.shape || null,
+              count: parseIntOrNull(diamondDetails.count),
+              totalWeight: parseFloatOrNull(diamondDetails.totalWeight),
+              color: diamondDetails.color || null,
+              clarity: diamondDetails.clarity || null,
+              sizeRange: diamondDetails.sizeRange || null,
+            }
+          });
+        }
+
+        // Other stones (multi-row)
+        if (Array.isArray(stoneDetails) && stoneDetails.length > 0) {
+          await tx.productStoneDetail.createMany({
+            data: stoneDetails
+              .filter(s => s && s.name)
+              .map((s, i) => ({
+                productId: product.id,
+                name: s.name,
+                count: parseIntOrNull(s.count),
+                totalWeight: parseFloatOrNull(s.totalWeight),
+                sortOrder: i,
+              }))
+          });
+        }
+
+        // Price breakup (multi-row)
+        if (Array.isArray(priceBreakup) && priceBreakup.length > 0) {
+          await tx.productPriceBreakup.createMany({
+            data: priceBreakup
+              .filter(b => b && b.label && b.amount != null && b.amount !== '')
+              .map((b, i) => ({
+                productId: product.id,
+                label: b.label,
+                amount: parseFloat(b.amount),
+                sortOrder: i,
+              }))
           });
         }
 
@@ -331,7 +488,15 @@ class ProductService {
       const {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured, isActive, sku,
-        certification, images, tags, existingImageData, primaryImageUrl
+        certification, images, tags, existingImageData, primaryImageUrl,
+        // Phase 1
+        availableColors, defaultColor, availablePurities, defaultPurity,
+        // Phase 2
+        sizeMin, sizeMax, sizeUnit,
+        // Phase 3
+        diamondDetails, stoneDetails,
+        // Phase 4
+        priceBreakup,
       } = updates;
 
       const result = await prisma.$transaction(async (tx) => {
@@ -351,6 +516,13 @@ class ProductService {
         if (isActive !== undefined) updateData.isActive = isActive;
         if (sku !== undefined) updateData.sku = sku;
         if (certification !== undefined) updateData.certification = certification;
+        if (availableColors !== undefined) updateData.availableColors = normalizeJsonArray(availableColors);
+        if (defaultColor !== undefined) updateData.defaultColor = defaultColor || null;
+        if (availablePurities !== undefined) updateData.availablePurities = normalizeJsonArray(availablePurities);
+        if (defaultPurity !== undefined) updateData.defaultPurity = defaultPurity || null;
+        if (sizeMin !== undefined) updateData.sizeMin = sizeMin === null || sizeMin === '' ? null : parseInt(sizeMin);
+        if (sizeMax !== undefined) updateData.sizeMax = sizeMax === null || sizeMax === '' ? null : parseInt(sizeMax);
+        if (sizeUnit !== undefined) updateData.sizeUnit = sizeUnit || null;
 
         const updatedProduct = await tx.product.update({
           where: { id: parseInt(id) },
@@ -415,6 +587,59 @@ class ProductService {
                 productId: parseInt(id),
                 tag
               }))
+            });
+          }
+        }
+
+        // Diamond details — replace if provided
+        if (diamondDetails !== undefined) {
+          await tx.productDiamondDetail.deleteMany({ where: { productId: parseInt(id) } });
+          if (diamondDetails && hasDiamondData(diamondDetails)) {
+            await tx.productDiamondDetail.create({
+              data: {
+                productId: parseInt(id),
+                shape: diamondDetails.shape || null,
+                count: parseIntOrNull(diamondDetails.count),
+                totalWeight: parseFloatOrNull(diamondDetails.totalWeight),
+                color: diamondDetails.color || null,
+                clarity: diamondDetails.clarity || null,
+                sizeRange: diamondDetails.sizeRange || null,
+              }
+            });
+          }
+        }
+
+        // Other stones — replace
+        if (stoneDetails !== undefined) {
+          await tx.productStoneDetail.deleteMany({ where: { productId: parseInt(id) } });
+          if (Array.isArray(stoneDetails) && stoneDetails.length > 0) {
+            await tx.productStoneDetail.createMany({
+              data: stoneDetails
+                .filter(s => s && s.name)
+                .map((s, i) => ({
+                  productId: parseInt(id),
+                  name: s.name,
+                  count: parseIntOrNull(s.count),
+                  totalWeight: parseFloatOrNull(s.totalWeight),
+                  sortOrder: i,
+                }))
+            });
+          }
+        }
+
+        // Price breakup — replace
+        if (priceBreakup !== undefined) {
+          await tx.productPriceBreakup.deleteMany({ where: { productId: parseInt(id) } });
+          if (Array.isArray(priceBreakup) && priceBreakup.length > 0) {
+            await tx.productPriceBreakup.createMany({
+              data: priceBreakup
+                .filter(b => b && b.label && b.amount != null && b.amount !== '')
+                .map((b, i) => ({
+                  productId: parseInt(id),
+                  label: b.label,
+                  amount: parseFloat(b.amount),
+                  sortOrder: i,
+                }))
             });
           }
         }

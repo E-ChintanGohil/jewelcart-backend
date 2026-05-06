@@ -276,6 +276,7 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
 }, async (req, res) => {
   try {
     // Parse product data from multipart form
+    const tryJSON = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
     const productData = {
       name: req.body.name,
       description: req.body.description,
@@ -289,7 +290,21 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
       stock: parseInt(req.body.stock),
       featured: req.body.featured === 'true',
       isActive: req.body.isActive !== 'false', // Default to true
-      tags: req.body.tags ? JSON.parse(req.body.tags) : []
+      tags: tryJSON(req.body.tags, []),
+      // Phase 1
+      availableColors: tryJSON(req.body.availableColors, undefined),
+      defaultColor: req.body.defaultColor || undefined,
+      availablePurities: tryJSON(req.body.availablePurities, undefined),
+      defaultPurity: req.body.defaultPurity || undefined,
+      // Phase 2
+      sizeMin: req.body.sizeMin ?? undefined,
+      sizeMax: req.body.sizeMax ?? undefined,
+      sizeUnit: req.body.sizeUnit || undefined,
+      // Phase 3
+      diamondDetails: tryJSON(req.body.diamondDetails, undefined),
+      stoneDetails: tryJSON(req.body.stoneDetails, undefined),
+      // Phase 4
+      priceBreakup: tryJSON(req.body.priceBreakup, undefined),
     };
 
     // Validate required fields
@@ -418,6 +433,7 @@ router.put('/:id', authenticateToken, requireStaff, (req, res, next) => {
     let imageUrls = [];
 
     if (isMultipart) {
+      const tryJSON = (v, fb) => { try { return v ? JSON.parse(v) : fb; } catch { return fb; } };
       // Parse product data from multipart form
       productData = {
         name: req.body.name,
@@ -432,7 +448,17 @@ router.put('/:id', authenticateToken, requireStaff, (req, res, next) => {
         stock: req.body.stock ? parseInt(req.body.stock) : undefined,
         featured: req.body.featured === 'true',
         isActive: req.body.isActive !== 'false',
-        tags: req.body.tags ? JSON.parse(req.body.tags) : undefined
+        tags: req.body.tags ? JSON.parse(req.body.tags) : undefined,
+        availableColors: tryJSON(req.body.availableColors, undefined),
+        defaultColor: req.body.defaultColor || undefined,
+        availablePurities: tryJSON(req.body.availablePurities, undefined),
+        defaultPurity: req.body.defaultPurity || undefined,
+        sizeMin: req.body.sizeMin ?? undefined,
+        sizeMax: req.body.sizeMax ?? undefined,
+        sizeUnit: req.body.sizeUnit || undefined,
+        diamondDetails: tryJSON(req.body.diamondDetails, undefined),
+        stoneDetails: tryJSON(req.body.stoneDetails, undefined),
+        priceBreakup: tryJSON(req.body.priceBreakup, undefined),
       };
 
       // Get existing images if user wants to keep them

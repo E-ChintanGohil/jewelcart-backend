@@ -43,6 +43,8 @@ router.post('/run', authenticateToken, requireStaff, async (_req, res) => {
 });
 
 // PUT /api/price-update/settings — admin toggles + rates config
+// If duty%, GST%, or API key change, also re-run the price update so the
+// breakdown and product prices reflect the new settings immediately.
 router.put('/settings', authenticateToken, requireStaff, async (req, res) => {
   const { enabled, importDutyPercent, gstOnMetalPercent, metalPriceApiKey } = req.body || {};
   const existing = await prisma.siteSetting.findFirst();
@@ -60,11 +62,22 @@ router.put('/settings', authenticateToken, requireStaff, async (req, res) => {
   stopPriceUpdateScheduler();
   await startPriceUpdateScheduler();
 
+  // If any rate-affecting field changed, re-run the update so karat + product prices update
+  const ratesChanged =
+    importDutyPercent != null ||
+    gstOnMetalPercent != null ||
+    (typeof metalPriceApiKey === 'string' && metalPriceApiKey !== '');
+  let runResult = null;
+  if (ratesChanged) {
+    runResult = await runPriceUpdate({ trigger: 'settings-save' });
+  }
+
   res.json({
     enabled: updated.priceUpdateEnabled,
     importDutyPercent: updated.importDutyPercent,
     gstOnMetalPercent: updated.gstOnMetalPercent,
     hasApiKey: !!(updated.metalPriceApiKey || process.env.METALPRICE_API_KEY),
+    rerun: runResult,
   });
 });
 

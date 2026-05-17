@@ -25,6 +25,16 @@ router.get('/status', authenticateToken, requireStaff, async (_req, res) => {
   });
 });
 
+// GET /api/price-update/history — recent fetch attempts (newest first)
+router.get('/history', authenticateToken, requireStaff, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = await prisma.priceFetchHistory.findMany({
+    orderBy: { fetchedAt: 'desc' },
+    take: limit,
+  });
+  res.json({ rows });
+});
+
 // POST /api/price-update/run — manual trigger
 router.post('/run', authenticateToken, requireStaff, async (_req, res) => {
   const result = await runPriceUpdate({ trigger: 'manual' });

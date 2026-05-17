@@ -643,6 +643,27 @@ model SiteSetting {
   @@map("settings")
 }
 
+model PriceFetchHistory {
+  id              Int      @id @default(autoincrement())
+  trigger         String   // 'cron-10am' | 'cron-5pm' | 'manual'
+  status          String   // 'OK' | 'FAIL'
+  goldInrPerGram  Decimal? @db.Decimal(10, 2) @map("gold_inr_per_gram")
+  silverInrPerGram Decimal? @db.Decimal(10, 2) @map("silver_inr_per_gram")
+  usdInr          Decimal? @db.Decimal(10, 4) @map("usd_inr")
+  goldUsdPerOz    Decimal? @db.Decimal(10, 2) @map("gold_usd_per_oz")
+  silverUsdPerOz  Decimal? @db.Decimal(10, 2) @map("silver_usd_per_oz")
+  importDutyPct   Decimal? @db.Decimal(5, 2) @map("import_duty_pct")
+  gstPct          Decimal? @db.Decimal(5, 2) @map("gst_pct")
+  karatsUpdated   Int?     @map("karats_updated")
+  productsUpdated Int?     @map("products_updated")
+  breakdown       Json?
+  errorMessage    String?  @db.Text @map("error_message")
+  fetchedAt       DateTime @default(now()) @map("fetched_at")
+
+  @@index([fetchedAt])
+  @@map("price_fetch_history")
+}
+
 model UserPreference {
   id                        Int      @id @default(autoincrement())
   userId                    Int      @unique @map("user_id")

@@ -70,7 +70,7 @@ router.get('/:id', [
 router.post('/', authenticateToken, requireStaff, [
   body('name').trim().isLength({ min: 1 }).withMessage('Category name is required'),
   body('description').optional().trim(),
-  body('imageUrl').optional({ values: 'falsy' }).isURL().withMessage('Image URL must be valid'),
+  body('imageUrl').optional({ values: 'falsy' }).isString().withMessage('Image URL must be a string'),
   body('status').optional().isIn(['ACTIVE', 'INACTIVE']).withMessage('Invalid status'),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer')
 ], async (req, res) => {
@@ -113,7 +113,7 @@ router.put('/:id', authenticateToken, requireStaff, [
   param('id').isInt({ min: 1 }).withMessage('Valid category ID is required'),
   body('name').optional().trim().isLength({ min: 1 }).withMessage('Category name cannot be empty'),
   body('description').optional().trim(),
-  body('imageUrl').optional({ values: 'falsy' }).isURL().withMessage('Image URL must be valid'),
+  body('imageUrl').optional({ values: 'falsy' }).isString().withMessage('Image URL must be a string'),
   body('status').optional().isIn(['ACTIVE', 'INACTIVE']).withMessage('Invalid status'),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer')
 ], async (req, res) => {

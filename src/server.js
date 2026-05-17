@@ -21,6 +21,8 @@ import userPreferencesRoutes from './routes/userPreferences.js';
 import paymentRoutes from './routes/payments.js';
 import uploadRoutes from './routes/upload.js';
 import couponRoutes from './routes/coupons.js';
+import priceUpdateRoutes from './routes/priceUpdate.js';
+import { startPriceUpdateScheduler } from './jobs/priceUpdateScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -94,6 +96,7 @@ app.use('/api/user-preferences', userPreferencesRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/price-update', priceUpdateRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -140,6 +143,8 @@ const startServer = async () => {
       console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:8080'}`);
     });
+
+    startPriceUpdateScheduler().catch(err => console.error('priceUpdate scheduler init failed:', err));
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

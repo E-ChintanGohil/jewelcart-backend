@@ -83,14 +83,15 @@ router.post('/', authenticateToken, requireStaff, [
       });
     }
 
-    const { name, description, imageUrl, status = 'ACTIVE', sortOrder = 0 } = req.body;
+    const { name, description, imageUrl, status = 'ACTIVE', sortOrder = 0, showOnHomepage = true } = req.body;
 
     const category = await CategoryService.create({
       name,
       description,
       imageUrl,
       status,
-      sortOrder
+      sortOrder,
+      showOnHomepage,
     });
 
     res.status(201).json({
@@ -126,14 +127,15 @@ router.put('/:id', authenticateToken, requireStaff, [
       });
     }
 
-    const { name, description, imageUrl, status, sortOrder } = req.body;
+    const { name, description, imageUrl, status, sortOrder, showOnHomepage } = req.body;
 
     const category = await CategoryService.update(req.params.id, {
       name,
       description,
       imageUrl,
       status,
-      sortOrder
+      sortOrder,
+      showOnHomepage,
     });
 
     res.json({

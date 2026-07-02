@@ -614,6 +614,7 @@ model SiteSetting {
   contactEmail          String?  @map("contact_email")
   contactPhone          String?  @map("contact_phone")
   contactAddress        String?  @db.Text @map("contact_address")
+  contactInstagram      String?  @map("contact_instagram")
   goldPrice             Decimal  @default(620) @db.Decimal(10, 2) @map("gold_price")
   silverPrice           Decimal  @default(8) @db.Decimal(10, 2) @map("silver_price")
   taxRate               Decimal  @default(3) @db.Decimal(5, 2) @map("tax_rate")

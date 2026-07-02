@@ -36,6 +36,7 @@ router.put('/', authenticateToken, requireStaff, [
   body('contactEmail').optional().isEmail().withMessage('Valid email is required'),
   body('contactPhone').optional().trim(),
   body('contactAddress').optional().trim(),
+  body('contactInstagram').optional({ values: 'falsy' }).isURL().withMessage('Instagram must be a valid URL'),
   body('goldPrice').optional().isFloat({ min: 0 }).withMessage('Gold price must be positive'),
   body('silverPrice').optional().isFloat({ min: 0 }).withMessage('Silver price must be positive'),
   body('taxRate').optional().isFloat({ min: 0, max: 100 }).withMessage('Tax rate must be between 0 and 100'),
@@ -61,7 +62,7 @@ router.put('/', authenticateToken, requireStaff, [
     }
 
     const {
-      siteName, siteDescription, logo, contactEmail, contactPhone, contactAddress,
+      siteName, siteDescription, logo, contactEmail, contactPhone, contactAddress, contactInstagram,
       goldPrice, silverPrice, taxRate, shippingRate, freeShippingThreshold,
       currency, paymentMethods,
       smtpHost, smtpPort, smtpUser, smtpPassword, smtpFromEmail, smtpFromName, smtpSecure
@@ -77,6 +78,7 @@ router.put('/', authenticateToken, requireStaff, [
       contact_email: contactEmail,
       contact_phone: contactPhone,
       contact_address: contactAddress,
+      contact_instagram: contactInstagram,
       gold_price: goldPrice,
       silver_price: silverPrice,
       tax_rate: taxRate,

@@ -223,6 +223,7 @@ CREATE TABLE settings (
     contact_email VARCHAR(255),
     contact_phone VARCHAR(20),
     contact_address TEXT,
+    contact_instagram VARCHAR(255),
     gold_price DECIMAL(10,2) DEFAULT 5500,
     silver_price DECIMAL(10,2) DEFAULT 80,
     tax_rate DECIMAL(5,2) DEFAULT 18.00,

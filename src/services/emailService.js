@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { executeQuery } from '../config/database.js';
+import { generateInvoicePDF } from './invoiceService.js';
 
 // ─── SMTP config cache (5-minute TTL) ────────────────────────────────────────
 let cachedConfig = null;
@@ -66,7 +67,7 @@ const createTransporter = (config) => {
   });
 };
 
-const send = async (to, subject, html) => {
+const send = async (to, subject, html, attachments = []) => {
   const config = await getSmtpConfig();
   if (!config) {
     console.log(`[Email] SMTP not configured — skipping: "${subject}" to ${to}`);
@@ -79,6 +80,7 @@ const send = async (to, subject, html) => {
       to,
       subject,
       html,
+      ...(attachments.length ? { attachments } : {}),
     });
   } catch (error) {
     // Never crash the request over an email failure
@@ -251,6 +253,20 @@ const EmailService = {
    */
   async sendPaymentConfirmation(customer, order, paymentId) {
     const subject = `Payment Confirmed — ${order.orderNumber}`;
+
+    // Invoice is a nice-to-have on this email — never let a PDF failure block the receipt
+    let attachments = [];
+    try {
+      const { pdfBuffer } = await generateInvoicePDF(order.id);
+      attachments = [{
+        filename: `invoice-${order.orderNumber}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      }];
+    } catch (error) {
+      console.error(`[Email] Invoice PDF failed for ${order.orderNumber}:`, error.message);
+    }
+
     const html = await wrap(`
       <h2>Payment Received</h2>
       <p>Hi ${customer.firstName},</p>
@@ -261,9 +277,11 @@ const EmailService = {
         <div class="info-row"><span class="info-label">Amount Paid</span><span class="info-value">₹${parseFloat(order.totalAmount).toLocaleString('en-IN')}</span></div>
         <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="status-badge" style="background:#d1fae5;color:#065f46">Paid</span></span></div>
       </div>
-      <p style="color:#6b7280;font-size:13px">Please save this email as your payment receipt. You can also view your order history in your account.</p>
+      <p style="color:#6b7280;font-size:13px">${attachments.length
+        ? 'Your tax invoice is attached to this email as a PDF. You can also view your order history in your account.'
+        : 'Please save this email as your payment receipt. You can also view your order history in your account.'}</p>
     `);
-    await send(customer.email, subject, html);
+    await send(customer.email, subject, html, attachments);
   },
 
   /**

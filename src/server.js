@@ -51,7 +51,8 @@ app.use(cors({
     'http://localhost:8080',
     'http://localhost:8081',
     'http://localhost:8082',
-    process.env.FRONTEND_URL
+    // FRONTEND_URL may be a comma-separated list (e.g. apex + www)
+    ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim()) : [])
   ].filter(Boolean),
   credentials: true,
   optionsSuccessStatus: 200

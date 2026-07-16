@@ -81,7 +81,10 @@ class ProductService {
 
       if (!product) return null;
 
-      const calculatedPrice = await this.calculatePrice(product.materialId, product.karatId, product.weight, product.basePrice);
+      // Fixed-price products bypass the weight-based calc entirely (cron-safe)
+      const calculatedPrice = product.fixedPrice != null
+        ? Math.round(parseFloat(product.fixedPrice))
+        : await this.calculatePrice(product.materialId, product.karatId, product.weight, product.basePrice);
 
       return {
         id: product.id,
@@ -99,6 +102,8 @@ class ProductService {
         karat_purity: product.karat.purity,
         base_price: parseFloat(product.basePrice),
         calculated_price: calculatedPrice,
+        fixed_price: product.fixedPrice != null ? parseFloat(product.fixedPrice) : null,
+        is_fixed_price: product.fixedPrice != null,
         weight: parseFloat(product.weight),
         gemstone: product.gemstone,
         dimensions: product.dimensions,
@@ -278,12 +283,14 @@ class ProductService {
       // Transform and calculate prices for all products
       const transformedProducts = await Promise.all(
         products.map(async (product) => {
-          const calculatedPrice = await this.calculatePrice(
-            product.materialId,
-            product.karatId,
-            product.weight,
-            product.basePrice
-          );
+          const calculatedPrice = product.fixedPrice != null
+            ? Math.round(parseFloat(product.fixedPrice))
+            : await this.calculatePrice(
+                product.materialId,
+                product.karatId,
+                product.weight,
+                product.basePrice
+              );
 
           return {
             id: product.id,
@@ -301,6 +308,8 @@ class ProductService {
             base_price: parseFloat(product.basePrice),
             calculated_price: calculatedPrice,
             price: calculatedPrice,
+            fixed_price: product.fixedPrice != null ? parseFloat(product.fixedPrice) : null,
+            is_fixed_price: product.fixedPrice != null,
             weight: parseFloat(product.weight),
             gemstone: product.gemstone,
             dimensions: product.dimensions,
@@ -346,6 +355,7 @@ class ProductService {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured = false,
         isActive = true, certification, images = [], tags = [],
+        fixedPrice,
         // Phase 1
         availableColors, defaultColor, availablePurities, defaultPurity,
         // Phase 2
@@ -370,8 +380,9 @@ class ProductService {
             categoryId,
             materialId,
             karatId,
-            basePrice: parseFloat(basePrice),
-            weight: parseFloat(weight),
+            basePrice: parseFloat(basePrice) || 0,
+            weight: parseFloat(weight) || 0,
+            fixedPrice: fixedPrice != null && fixedPrice !== '' ? parseFloat(fixedPrice) : null,
             gemstone,
             dimensions,
             certification,
@@ -489,6 +500,7 @@ class ProductService {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured, isActive, sku,
         certification, images, tags, existingImageData, primaryImageUrl,
+        fixedPrice,
         // Phase 1
         availableColors, defaultColor, availablePurities, defaultPurity,
         // Phase 2
@@ -509,7 +521,8 @@ class ProductService {
         if (materialId !== undefined) updateData.materialId = materialId;
         if (karatId !== undefined) updateData.karatId = karatId;
         if (gemstone !== undefined) updateData.gemstone = gemstone;
-        if (weight !== undefined) updateData.weight = parseFloat(weight);
+        if (weight !== undefined) updateData.weight = parseFloat(weight) || 0;
+        if (fixedPrice !== undefined) updateData.fixedPrice = (fixedPrice === null || fixedPrice === '') ? null : parseFloat(fixedPrice);
         if (dimensions !== undefined) updateData.dimensions = dimensions;
         if (stock !== undefined) updateData.stockQuantity = parseInt(stock);
         if (featured !== undefined) updateData.isFeatured = featured;
@@ -730,7 +743,9 @@ class ProductService {
 
   static async updateAllPrices() {
     try {
+      // Fixed-price products are excluded — the metal-rate cron must never touch them
       const products = await prisma.product.findMany({
+        where: { fixedPrice: null },
         select: {
           id: true,
           materialId: true,

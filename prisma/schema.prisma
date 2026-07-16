@@ -147,7 +147,10 @@ model Product {
   materialId        Int     @map("material_id")
   karatId           Int     @map("karat_id")
   basePrice         Decimal @db.Decimal(10, 2) @map("base_price")
-  weight            Decimal @db.Decimal(8, 3) // Weight in grams
+  weight            Decimal @default(0) @db.Decimal(8, 3) // Weight in grams (0 for fixed-price products)
+  // When set, this is a FIXED-PRICE product: fixedPrice is used everywhere (page, cart, checkout, invoice)
+  // and the metal-rate cron never affects it. When null, the weight-based calculation is used.
+  fixedPrice        Decimal? @db.Decimal(10, 2) @map("fixed_price")
   gemstone          String?
   dimensions        String?
   certification     String?

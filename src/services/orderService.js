@@ -255,6 +255,7 @@ class OrderService {
               name: true,
               basePrice: true,
               weight: true,
+              fixedPrice: true,
               stockQuantity: true,
               karat: {
                 select: {
@@ -272,9 +273,16 @@ class OrderService {
             throw new Error(`Insufficient stock for product ${product.name}`);
           }
 
-          // Calculate unit price (base price + material cost)
-          const materialCost = parseFloat(product.karat.pricePerGram) * parseFloat(product.weight);
-          const unitPrice = parseFloat(product.basePrice) + materialCost;
+          // Fixed-price products charge exactly their set price; otherwise weight-based.
+          // Must match the display formula in productService.calculatePrice.
+          let unitPrice;
+          if (product.fixedPrice != null) {
+            unitPrice = parseFloat(product.fixedPrice);
+          } else {
+            const pricePerGram = parseFloat(product.karat.pricePerGram);
+            const makingChargePerGram = parseFloat(product.basePrice) || 0;
+            unitPrice = Math.round((pricePerGram + makingChargePerGram) * parseFloat(product.weight));
+          }
           const totalPrice = unitPrice * quantity;
 
           // Create order item

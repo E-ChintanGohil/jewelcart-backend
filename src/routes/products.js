@@ -47,14 +47,18 @@ const upload = multer({
 });
 
 // Validation middleware
+// A product is "fixed-price" when fixedPrice is provided; then weight/basePrice are not required.
+const hasFixedPrice = (req) => req.body.fixedPrice != null && req.body.fixedPrice !== '';
+
 const validateProduct = [
   body('name').trim().isLength({ min: 1 }).withMessage('Product name is required'),
   body('description').optional().trim(),
-  body('basePrice').isFloat({ min: 0 }).withMessage('Base price must be a positive number'),
+  body('fixedPrice').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Fixed price must be a positive number'),
+  body('basePrice').optional().isFloat({ min: 0 }).withMessage('Base price must be a positive number'),
   body('categoryId').isInt({ min: 1 }).withMessage('Valid category ID is required'),
   body('materialId').isInt({ min: 1 }).withMessage('Valid material ID is required'),
   body('karatId').isInt({ min: 1 }).withMessage('Valid karat ID is required'),
-  body('weight').isFloat({ min: 0.01 }).withMessage('Weight must be greater than 0'),
+  body('weight').if((value, { req }) => !hasFixedPrice(req)).isFloat({ min: 0.01 }).withMessage('Weight must be greater than 0'),
   body('stock').isInt({ min: 0 }).withMessage('Stock must be a non-negative integer'),
   // SKU is auto-generated, so not required in validation
   body('images').optional().isArray().withMessage('Images must be an array'),
@@ -63,6 +67,7 @@ const validateProduct = [
 
 const validateProductUpdate = [
   body('name').optional().trim().isLength({ min: 1 }).withMessage('Product name cannot be empty'),
+  body('fixedPrice').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Fixed price must be a positive number'),
   body('basePrice').optional().isFloat({ min: 0 }).withMessage('Base price must be a positive number'),
   body('categoryId').optional().isInt({ min: 1 }).withMessage('Valid category ID is required'),
   body('materialId').optional().isInt({ min: 1 }).withMessage('Valid material ID is required'),
@@ -277,14 +282,16 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
   try {
     // Parse product data from multipart form
     const tryJSON = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+    const isFixed = req.body.fixedPrice != null && req.body.fixedPrice !== '';
     const productData = {
       name: req.body.name,
       description: req.body.description,
-      basePrice: parseFloat(req.body.basePrice),
+      fixedPrice: isFixed ? parseFloat(req.body.fixedPrice) : null,
+      basePrice: parseFloat(req.body.basePrice) || 0,
       categoryId: parseInt(req.body.categoryId),
       materialId: parseInt(req.body.materialId),
       karatId: parseInt(req.body.karatId),
-      weight: parseFloat(req.body.weight),
+      weight: parseFloat(req.body.weight) || 0,
       gemstone: req.body.gemstone || undefined,
       certification: req.body.certification || undefined,
       stock: parseInt(req.body.stock),
@@ -307,9 +314,10 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
       priceBreakup: tryJSON(req.body.priceBreakup, undefined),
     };
 
-    // Validate required fields
-    if (!productData.name || !productData.basePrice || !productData.categoryId ||
-        !productData.materialId || !productData.karatId || !productData.weight ||
+    // Validate required fields (fixed-price products don't need weight/basePrice)
+    if (!productData.name || !productData.categoryId ||
+        !productData.materialId || !productData.karatId ||
+        (!isFixed && !productData.weight) ||
         productData.stock === undefined) {
       // Clean up uploaded files if validation fails
       if (req.files) {
@@ -438,6 +446,9 @@ router.put('/:id', authenticateToken, requireStaff, (req, res, next) => {
       productData = {
         name: req.body.name,
         description: req.body.description,
+        fixedPrice: req.body.fixedPrice !== undefined
+          ? (req.body.fixedPrice === '' || req.body.fixedPrice === 'null' ? null : parseFloat(req.body.fixedPrice))
+          : undefined,
         basePrice: req.body.basePrice ? parseFloat(req.body.basePrice) : undefined,
         categoryId: req.body.categoryId ? parseInt(req.body.categoryId) : undefined,
         materialId: req.body.materialId ? parseInt(req.body.materialId) : undefined,

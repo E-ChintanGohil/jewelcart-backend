@@ -54,6 +54,16 @@ router.post('/validate', authenticateCustomer, [
       return res.status(400).json({ valid: false, error: check.reason });
     }
 
+    // One-use-per-customer: block if this customer already redeemed it
+    if (coupon.oncePerCustomer) {
+      const priorUse = await prisma.order.count({
+        where: { customerId: req.customer.id, couponId: coupon.id },
+      });
+      if (priorUse > 0) {
+        return res.status(400).json({ valid: false, error: 'You have already used this coupon' });
+      }
+    }
+
     const discountAmount = calculateDiscount(coupon, orderAmount);
 
     res.json({
@@ -97,6 +107,7 @@ router.post('/', authenticateToken, requireAdmin, [
   body('discountValue').isFloat({ min: 0.01 }).withMessage('discountValue must be > 0'),
   body('minOrderAmount').optional({ nullable: true }).isFloat({ min: 0 }),
   body('maxUses').optional({ nullable: true }).isInt({ min: 1 }),
+  body('oncePerCustomer').optional().isBoolean(),
   body('expiresAt').optional({ nullable: true }).isISO8601(),
   body('isActive').optional().isBoolean(),
 ], async (req, res) => {
@@ -105,7 +116,7 @@ router.post('/', authenticateToken, requireAdmin, [
     return res.status(400).json({ error: 'Validation failed', details: errors.array() });
   }
 
-  const { code, discountType, discountValue, minOrderAmount, maxUses, expiresAt, isActive } = req.body;
+  const { code, discountType, discountValue, minOrderAmount, maxUses, oncePerCustomer, expiresAt, isActive } = req.body;
 
   try {
     const coupon = await prisma.coupon.create({
@@ -115,6 +126,7 @@ router.post('/', authenticateToken, requireAdmin, [
         discountValue: parseFloat(discountValue),
         minOrderAmount: minOrderAmount != null ? parseFloat(minOrderAmount) : null,
         maxUses: maxUses != null ? parseInt(maxUses) : null,
+        oncePerCustomer: !!oncePerCustomer,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         isActive: isActive !== undefined ? isActive : true,
       },
@@ -142,6 +154,7 @@ router.put('/:id', authenticateToken, requireAdmin, [
   body('discountValue').optional().isFloat({ min: 0.01 }),
   body('minOrderAmount').optional({ nullable: true }).isFloat({ min: 0 }),
   body('maxUses').optional({ nullable: true }).isInt({ min: 1 }),
+  body('oncePerCustomer').optional().isBoolean(),
   body('expiresAt').optional({ nullable: true }).isISO8601(),
   body('isActive').optional().isBoolean(),
 ], async (req, res) => {
@@ -150,13 +163,14 @@ router.put('/:id', authenticateToken, requireAdmin, [
     return res.status(400).json({ error: 'Validation failed', details: errors.array() });
   }
 
-  const { discountType, discountValue, minOrderAmount, maxUses, expiresAt, isActive } = req.body;
+  const { discountType, discountValue, minOrderAmount, maxUses, oncePerCustomer, expiresAt, isActive } = req.body;
   const updateData = {};
 
   if (discountType !== undefined) updateData.discountType = discountType;
   if (discountValue !== undefined) updateData.discountValue = parseFloat(discountValue);
   if (minOrderAmount !== undefined) updateData.minOrderAmount = minOrderAmount != null ? parseFloat(minOrderAmount) : null;
   if (maxUses !== undefined) updateData.maxUses = maxUses != null ? parseInt(maxUses) : null;
+  if (oncePerCustomer !== undefined) updateData.oncePerCustomer = !!oncePerCustomer;
   if (expiresAt !== undefined) updateData.expiresAt = expiresAt ? new Date(expiresAt) : null;
   if (isActive !== undefined) updateData.isActive = isActive;
 

@@ -586,6 +586,7 @@ model Coupon {
   discountValue  Decimal      @db.Decimal(10, 2) @map("discount_value")
   minOrderAmount Decimal?     @db.Decimal(10, 2) @map("min_order_amount")
   maxUses        Int?         @map("max_uses")
+  oncePerCustomer Boolean     @default(false) @map("once_per_customer")
   usedCount      Int          @default(0) @map("used_count")
   expiresAt      DateTime?    @map("expires_at")
   isActive       Boolean      @default(true) @map("is_active")

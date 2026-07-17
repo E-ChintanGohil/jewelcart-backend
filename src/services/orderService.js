@@ -213,7 +213,15 @@ class OrderService {
             const maxed = coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses;
             const sub = parseFloat(subtotal);
             const meetsMin = !coupon.minOrderAmount || sub >= parseFloat(coupon.minOrderAmount);
-            if (!expired && !maxed && meetsMin) {
+            // One-use-per-customer: has this customer already redeemed it?
+            let alreadyUsed = false;
+            if (coupon.oncePerCustomer) {
+              const priorUse = await tx.order.count({
+                where: { customerId: parseInt(customerId), couponId: coupon.id },
+              });
+              alreadyUsed = priorUse > 0;
+            }
+            if (!expired && !maxed && meetsMin && !alreadyUsed) {
               discountAmount = coupon.discountType === 'PERCENTAGE'
                 ? (sub * parseFloat(coupon.discountValue)) / 100
                 : Math.min(parseFloat(coupon.discountValue), sub);

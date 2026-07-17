@@ -114,7 +114,8 @@ class OrderService {
                 select: {
                   id: true,
                   name: true,
-                  sku: true
+                  sku: true,
+                  weight: true
                 }
               }
             }

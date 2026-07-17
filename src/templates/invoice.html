@@ -92,7 +92,8 @@
 			<table class="items table w-100 mb-0">
 				<thead>
 					<tr>
-						<th style="width: 55%;">Description</th>
+						<th style="width: 42%;">Description</th>
+						<th style="width: 13%;" class="text-center">Weight</th>
 						<th style="width: 10%;" class="text-center">Qty</th>
 						<th style="width: 17%;" class="text-end">Rate</th>
 						<th style="width: 18%;" class="text-end">Amount</th>
@@ -103,24 +104,24 @@
 				</tbody>
 				<tfoot>
 					<tr>
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<th class="text-end">Sub Total</th>
 						<th class="text-end">{{subtotal}}</th>
 					</tr>
 					{{discountRow}}
 					{{shippingRow}}
 					<tr>
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<th class="text-end fw-medium text-muted">CGST &middot; 1.5%</th>
 						<th class="text-end fw-medium">{{cgst}}</th>
 					</tr>
 					<tr>
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<th class="text-end fw-medium text-muted">SGST &middot; 1.5%</th>
 						<th class="text-end fw-medium">{{sgst}}</th>
 					</tr>
 					<tr class="grand-total-row">
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<td class="text-end text-primary fw-bold">Grand Total</td>
 						<td class="text-end text-primary fw-bold">{{grandTotal}}</td>
 					</tr>

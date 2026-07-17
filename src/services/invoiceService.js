@@ -33,12 +33,18 @@ const formatDate = (d) => {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const formatWeight = (w) => {
+  const n = Number(w || 0);
+  return n > 0 ? `${n.toFixed(3).replace(/\.?0+$/, '')} g` : '—';
+};
+
 const buildItemRows = (items) =>
   items
     .map(
       (item) => `
 					<tr>
 						<th scope="row" class="fw-medium">${escapeHtml(item.productName)}</th>
+						<td class="text-center">${formatWeight(item.product?.weight ?? item.weight)}</td>
 						<td class="text-center">${item.quantity}</td>
 						<td class="text-end">${INR(item.unitPrice)}</td>
 						<td class="text-end">${INR(item.totalPrice)}</td>
@@ -88,7 +94,7 @@ export const generateInvoicePDF = async (orderId) => {
 
   const discountRow = order.discountAmount > 0
     ? `<tr>
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<th class="text-end fw-medium text-success">Discount</th>
 						<th class="text-end fw-medium text-success">&minus;${INR(order.discountAmount)}</th>
 					</tr>`
@@ -96,7 +102,7 @@ export const generateInvoicePDF = async (orderId) => {
 
   const shippingRow = order.shippingAmount > 0
     ? `<tr>
-						<td colspan="2"></td>
+						<td colspan="3"></td>
 						<th class="text-end fw-medium text-muted">Shipping</th>
 						<th class="text-end fw-medium">${INR(order.shippingAmount)}</th>
 					</tr>`

@@ -18,7 +18,7 @@ Node.js + Express + MySQL backend for Jewelcart jewelry e-commerce application.
 
 -   Node.js 18+
 -   MySQL 8.0+
--   XAMPP (for local MySQL) or MySQL server
+-   MariaDB/MySQL server (locally: Homebrew `mariadb@11.8` on `127.0.0.1:3306`)
 
 ## Installation
 
@@ -31,7 +31,7 @@ Node.js + Express + MySQL backend for Jewelcart jewelry e-commerce application.
 
 2. **Database Setup:**
 
-    - Start MySQL server (through XAMPP or standalone)
+    - MySQL/MariaDB (starts automatically at boot via LaunchDaemon)
     - Create database and run schema:
 
     ```bash
@@ -188,7 +188,7 @@ npm run seed     # Seed database with sample data (when implemented)
 ## Production Deployment
 
 1. Set `NODE_ENV=production`
-2. Use a proper MySQL server (not XAMPP)
+2. Use a proper MySQL server
 3. Set strong JWT secret
 4. Configure proper Razorpay credentials
 5. Set up SSL/HTTPS

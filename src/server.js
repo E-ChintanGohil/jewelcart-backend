@@ -30,6 +30,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Behind nginx / cPanel reverse proxy — without this every visitor is seen as the
+// proxy IP and they all share one rate-limit bucket.
+app.set('trust proxy', 1);
+
 // Security middleware - configure helmet to allow images from same origin
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
@@ -38,10 +42,18 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 1000 : 100,
-  message: 'Too many requests from this IP, please try again later.',
+  max: process.env.NODE_ENV === 'development' ? 5000 : 1000,
+  message: { error: 'Too many requests from this IP, please try again later.' },
 });
 app.use('/api/', limiter);
+
+// Stricter limit on login/registration to slow down brute-force attempts
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'development' ? 1000 : 10,
+  message: { error: 'Too many login attempts, please try again later.' },
+  skipSuccessfulRequests: true,
+});
 
 // CORS configuration
 app.use(cors({
@@ -82,6 +94,18 @@ app.get('/health', (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Credential endpoints only — /me, /addresses, /users etc. stay on the general limiter
+app.use([
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/customer-auth/login',
+  '/api/customer-auth/register',
+  '/api/customer-auth/forgot-password',
+  '/api/customer-auth/reset-password',
+], authLimiter);
 
 // API routes
 app.use('/api/auth', authRoutes);

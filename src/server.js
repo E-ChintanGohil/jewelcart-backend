@@ -22,7 +22,9 @@ import paymentRoutes from './routes/payments.js';
 import uploadRoutes from './routes/upload.js';
 import couponRoutes from './routes/coupons.js';
 import priceUpdateRoutes from './routes/priceUpdate.js';
+import sitemapRoutes from './routes/sitemap.js';
 import { startPriceUpdateScheduler } from './jobs/priceUpdateScheduler.js';
+import { startSitemapScheduler } from './jobs/sitemapScheduler.js';
 
 // Load environment variables
 dotenv.config();
@@ -122,6 +124,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/price-update', priceUpdateRoutes);
+app.use('/api/sitemap', sitemapRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -170,6 +173,7 @@ const startServer = async () => {
     });
 
     startPriceUpdateScheduler().catch(err => console.error('priceUpdate scheduler init failed:', err));
+    startSitemapScheduler();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

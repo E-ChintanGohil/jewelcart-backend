@@ -1,9 +1,6 @@
 import prisma from '../config/prisma.js';
 import SKUService from './skuService.js';
 
-// Fixed-price products: price = weight × this rate (₹/gram). Weight is derived from price.
-const FIXED_PRICE_RATE_PER_GRAM = 450;
-
 // ─── Helpers for new product fields ──────────────────────────────────────────
 const normalizeJsonArray = (value) => {
   if (value == null || value === '') return null;
@@ -384,10 +381,10 @@ class ProductService {
             materialId,
             karatId,
             basePrice: parseFloat(basePrice) || 0,
-            // Fixed-price products: weight is derived from price (price = weight × ₹450/g)
-            weight: (fixedPrice != null && fixedPrice !== '')
-              ? Math.round((parseFloat(fixedPrice) / FIXED_PRICE_RATE_PER_GRAM) * 1000) / 1000
-              : (parseFloat(weight) || 0),
+            // Weight is real, measured data and is always stored as entered — including
+            // for fixed-price products. Fixed price only means the price is set directly
+            // and the metal-rate cron never changes it; it says nothing about weight.
+            weight: parseFloat(weight) || 0,
             fixedPrice: fixedPrice != null && fixedPrice !== '' ? parseFloat(fixedPrice) : null,
             gemstone,
             dimensions,
@@ -531,8 +528,8 @@ class ProductService {
         if (fixedPrice !== undefined) {
           const fp = (fixedPrice === null || fixedPrice === '') ? null : parseFloat(fixedPrice);
           updateData.fixedPrice = fp;
-          // Fixed-price: derive weight from price (price = weight × ₹450/g)
-          if (fp != null) updateData.weight = Math.round((fp / FIXED_PRICE_RATE_PER_GRAM) * 1000) / 1000;
+          // Weight is left alone here — it comes from the payload above like any other
+          // field. Fixed price locks the price, not the weight.
         }
         if (dimensions !== undefined) updateData.dimensions = dimensions;
         if (stock !== undefined) updateData.stockQuantity = parseInt(stock);

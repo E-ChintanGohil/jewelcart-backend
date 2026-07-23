@@ -116,16 +116,18 @@ router.post('/verify-payment', authenticateCustomer, [
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // 3. Update order status and create payment record in a transaction
-    const [updatedOrder, payment] = await prisma.$transaction([
-      prisma.order.update({
+    // Already-paid guard (e.g. duplicate verify call) — don't reduce stock twice.
+    const alreadyPaid = order.paymentStatus === 'PAID';
+
+    // 3. Confirm order, record payment, and reduce stock — all in one transaction.
+    // Stock is reduced HERE (on successful payment), not at checkout, so an
+    // abandoned/unpaid order never makes an item show "sold out".
+    const { updatedOrder, payment } = await prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.update({
         where: { id: parseInt(db_order_id) },
-        data: {
-          status: 'CONFIRMED',
-          paymentStatus: 'PAID',
-        },
-      }),
-      prisma.payment.create({
+        data: { status: 'CONFIRMED', paymentStatus: 'PAID' },
+      });
+      const payment = await tx.payment.create({
         data: {
           orderId: parseInt(db_order_id),
           paymentMethod: 'RAZORPAY',
@@ -135,8 +137,31 @@ router.post('/verify-payment', authenticateCustomer, [
           status: 'PAID',
           paymentDate: new Date(),
         },
-      }),
-    ]);
+      });
+
+      if (!alreadyPaid) {
+        const items = await tx.orderItem.findMany({ where: { orderId: parseInt(db_order_id) } });
+        for (const item of items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: { decrement: item.quantity } },
+          });
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              movementType: 'SALE',
+              quantityChange: -item.quantity,
+              referenceType: 'ORDER',
+              referenceId: order.id,
+              reason: `Order ${order.orderNumber} (paid)`,
+              performedBy: 1,
+            },
+          });
+        }
+      }
+
+      return { updatedOrder, payment };
+    });
 
     // Send payment confirmation email (fire-and-forget)
     EmailService.sendPaymentConfirmation(req.customer, updatedOrder, razorpay_payment_id).catch(() => {});

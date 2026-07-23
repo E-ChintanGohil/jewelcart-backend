@@ -50,6 +50,10 @@ const upload = multer({
 // A product is "fixed-price" when fixedPrice is provided; then weight/basePrice are not required.
 const hasFixedPrice = (req) => req.body.fixedPrice != null && req.body.fixedPrice !== '';
 
+// Parse a checkbox/switch value that may arrive as a JSON boolean (application/json)
+// or a string (multipart form-data). Returns dflt when the field is absent.
+const toBool = (v, dflt) => v === undefined ? dflt : (v === true || v === 'true' || v === 1 || v === '1');
+
 const validateProduct = [
   body('name').trim().isLength({ min: 1 }).withMessage('Product name is required'),
   body('description').optional().trim(),
@@ -295,8 +299,8 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
       gemstone: req.body.gemstone || undefined,
       certification: req.body.certification || undefined,
       stock: parseInt(req.body.stock),
-      featured: req.body.featured === 'true',
-      isActive: req.body.isActive !== 'false', // Default to true
+      featured: toBool(req.body.featured, false),
+      isActive: toBool(req.body.isActive, true), // Default to true when omitted
       tags: tryJSON(req.body.tags, []),
       // Phase 1
       availableColors: tryJSON(req.body.availableColors, undefined),
@@ -457,8 +461,8 @@ router.put('/:id', authenticateToken, requireStaff, (req, res, next) => {
         gemstone: req.body.gemstone || undefined,
         certification: req.body.certification || undefined,
         stock: req.body.stock ? parseInt(req.body.stock) : undefined,
-        featured: req.body.featured === 'true',
-        isActive: req.body.isActive !== 'false',
+        featured: toBool(req.body.featured, undefined),
+        isActive: toBool(req.body.isActive, undefined),
         tags: req.body.tags ? JSON.parse(req.body.tags) : undefined,
         availableColors: tryJSON(req.body.availableColors, undefined),
         defaultColor: req.body.defaultColor || undefined,

@@ -192,7 +192,12 @@ class OrderService {
         taxAmount = 0,
         shippingAmount = 0,
         couponCode,
-        notes
+        notes,
+        // Whether to reduce stock as part of creating the order. Customer checkout
+        // passes false — stock is only reduced once payment succeeds (see
+        // payments.js verify-payment) so an abandoned/unpaid checkout never makes
+        // an item show "sold out". Admin-created orders keep the default (true).
+        decrementStock = true
       } = orderData;
 
       // Generate order number
@@ -306,28 +311,31 @@ class OrderService {
             }
           });
 
-          // Update product stock
-          await tx.product.update({
-            where: { id: parseInt(productId) },
-            data: {
-              stockQuantity: {
-                decrement: parseInt(quantity)
+          // Reduce stock now only for admin-created orders. For customer orders
+          // this is skipped and done at payment success instead.
+          if (decrementStock) {
+            await tx.product.update({
+              where: { id: parseInt(productId) },
+              data: {
+                stockQuantity: {
+                  decrement: parseInt(quantity)
+                }
               }
-            }
-          });
+            });
 
-          // Record stock movement
-          await tx.stockMovement.create({
-            data: {
-              productId: parseInt(productId),
-              movementType: 'SALE',
-              quantityChange: -parseInt(quantity),
-              referenceType: 'ORDER',
-              referenceId: order.id,
-              reason: `Order ${orderNumber}`,
-              performedBy: 1 // System user - should be passed from auth
-            }
-          });
+            // Record stock movement
+            await tx.stockMovement.create({
+              data: {
+                productId: parseInt(productId),
+                movementType: 'SALE',
+                quantityChange: -parseInt(quantity),
+                referenceType: 'ORDER',
+                referenceId: order.id,
+                reason: `Order ${orderNumber}`,
+                performedBy: 1 // System user - should be passed from auth
+              }
+            });
+          }
         }
 
         // Update customer statistics

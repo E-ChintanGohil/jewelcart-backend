@@ -64,7 +64,10 @@ router.post('/', authenticateCustomer, async (req, res) => {
   try {
     const orderData = {
       ...req.body,
-      customerId: req.customer.id
+      customerId: req.customer.id,
+      // Don't reduce stock at checkout — only after payment succeeds, so an
+      // unpaid/abandoned checkout never makes the item show "sold out".
+      decrementStock: false
     };
 
     const order = await OrderService.create(orderData);

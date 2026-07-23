@@ -38,6 +38,15 @@ const formatWeight = (w) => {
   return n > 0 ? `${n.toFixed(3).replace(/\.?0+$/, '')} g` : '—';
 };
 
+// Rate = ₹/gram material price. Prefer the rate stored on the line at purchase
+// time; for older orders without it, derive it as unitPrice ÷ weight so
+// Rate × Weight still equals the line amount.
+const itemRate = (item) => {
+  if (item.unitRate != null) return Number(item.unitRate);
+  const w = Number(item.product?.weight ?? item.weight ?? 0);
+  return w > 0 ? Number(item.unitPrice) / w : Number(item.unitPrice);
+};
+
 const buildItemRows = (items) =>
   items
     .map(
@@ -46,7 +55,7 @@ const buildItemRows = (items) =>
 						<th scope="row" class="fw-medium">${escapeHtml(item.productName)}</th>
 						<td class="text-center">${formatWeight(item.product?.weight ?? item.weight)}</td>
 						<td class="text-center">${item.quantity}</td>
-						<td class="text-end">${INR(item.unitPrice)}</td>
+						<td class="text-end">${INR(itemRate(item))}</td>
 						<td class="text-end">${INR(item.totalPrice)}</td>
 					</tr>`
     )

@@ -291,6 +291,7 @@ router.post('/with-images', authenticateToken, requireStaff, (req, res, next) =>
       name: req.body.name,
       description: req.body.description,
       fixedPrice: isFixed ? parseFloat(req.body.fixedPrice) : null,
+      ratePerGram: (isFixed && req.body.ratePerGram != null && req.body.ratePerGram !== '') ? parseFloat(req.body.ratePerGram) : null,
       basePrice: parseFloat(req.body.basePrice) || 0,
       categoryId: parseInt(req.body.categoryId),
       materialId: parseInt(req.body.materialId),
@@ -452,6 +453,9 @@ router.put('/:id', authenticateToken, requireStaff, (req, res, next) => {
         description: req.body.description,
         fixedPrice: req.body.fixedPrice !== undefined
           ? (req.body.fixedPrice === '' || req.body.fixedPrice === 'null' ? null : parseFloat(req.body.fixedPrice))
+          : undefined,
+        ratePerGram: req.body.ratePerGram !== undefined
+          ? (req.body.ratePerGram === '' || req.body.ratePerGram === 'null' ? null : parseFloat(req.body.ratePerGram))
           : undefined,
         basePrice: req.body.basePrice ? parseFloat(req.body.basePrice) : undefined,
         categoryId: req.body.categoryId ? parseInt(req.body.categoryId) : undefined,

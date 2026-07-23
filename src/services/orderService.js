@@ -71,6 +71,7 @@ class OrderService {
           productName: item.productName,
           quantity: item.quantity,
           unitPrice: parseFloat(item.unitPrice),
+          unitRate: item.unitRate != null ? parseFloat(item.unitRate) : null,
           totalPrice: parseFloat(item.totalPrice),
           appliedDiscountPercentage: parseFloat(item.appliedDiscountPercentage),
           product: item.product
@@ -158,6 +159,7 @@ class OrderService {
           productName: item.productName,
           quantity: item.quantity,
           unitPrice: parseFloat(item.unitPrice),
+          unitRate: item.unitRate != null ? parseFloat(item.unitRate) : null,
           totalPrice: parseFloat(item.totalPrice),
           appliedDiscountPercentage: parseFloat(item.appliedDiscountPercentage),
           product: item.product
@@ -270,6 +272,7 @@ class OrderService {
               basePrice: true,
               weight: true,
               fixedPrice: true,
+              ratePerGram: true,
               stockQuantity: true,
               karat: {
                 select: {
@@ -289,13 +292,19 @@ class OrderService {
 
           // Fixed-price products charge exactly their set price; otherwise weight-based.
           // Must match the display formula in productService.calculatePrice.
-          let unitPrice;
+          // unitRate = the ₹/gram rate shown on the invoice (Rate × Weight = unitPrice).
+          const weightGrams = parseFloat(product.weight) || 0;
+          let unitPrice, unitRate;
           if (product.fixedPrice != null) {
             unitPrice = parseFloat(product.fixedPrice);
+            unitRate = product.ratePerGram != null
+              ? parseFloat(product.ratePerGram)
+              : (weightGrams > 0 ? Math.round((unitPrice / weightGrams) * 100) / 100 : null);
           } else {
             const pricePerGram = parseFloat(product.karat.pricePerGram);
             const makingChargePerGram = parseFloat(product.basePrice) || 0;
-            unitPrice = Math.round((pricePerGram + makingChargePerGram) * parseFloat(product.weight));
+            unitRate = pricePerGram + makingChargePerGram;
+            unitPrice = Math.round(unitRate * weightGrams);
           }
           const totalPrice = unitPrice * quantity;
 
@@ -307,6 +316,7 @@ class OrderService {
               productName: product.name,
               quantity: parseInt(quantity),
               unitPrice: unitPrice,
+              unitRate: unitRate,
               totalPrice: totalPrice
             }
           });

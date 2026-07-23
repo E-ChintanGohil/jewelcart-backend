@@ -151,6 +151,8 @@ model Product {
   // When set, this is a FIXED-PRICE product: fixedPrice is used everywhere (page, cart, checkout, invoice)
   // and the metal-rate cron never affects it. When null, the weight-based calculation is used.
   fixedPrice        Decimal? @db.Decimal(10, 2) @map("fixed_price")
+  // Fixed-price products: the ₹/gram rate shown on the invoice. fixedPrice = ratePerGram × weight.
+  ratePerGram       Decimal? @db.Decimal(10, 2) @map("rate_per_gram")
   gemstone          String?
   dimensions        String?
   certification     String?
@@ -433,6 +435,9 @@ model OrderItem {
   productName              String  @map("product_name")
   quantity                 Int
   unitPrice                Decimal @db.Decimal(10, 2) @map("unit_price")
+  // ₹/gram rate that applied when this line was bought (metal+making for weight-based,
+  // the product's set rate for fixed-price). Frozen here so the invoice is historically correct.
+  unitRate                 Decimal? @db.Decimal(10, 2) @map("unit_rate")
   totalPrice               Decimal @db.Decimal(12, 2) @map("total_price")
   appliedDiscountPercentage Decimal @default(0) @db.Decimal(5, 2) @map("applied_discount_percentage")
 

@@ -104,6 +104,8 @@ class ProductService {
         calculated_price: calculatedPrice,
         fixed_price: product.fixedPrice != null ? parseFloat(product.fixedPrice) : null,
         is_fixed_price: product.fixedPrice != null,
+        rate_per_gram: product.ratePerGram != null ? parseFloat(product.ratePerGram) : null,
+        ratePerGram: product.ratePerGram != null ? parseFloat(product.ratePerGram) : null,
         weight: parseFloat(product.weight),
         gemstone: product.gemstone,
         dimensions: product.dimensions,
@@ -355,7 +357,7 @@ class ProductService {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured = false,
         isActive = true, certification, images = [], tags = [],
-        fixedPrice,
+        fixedPrice, ratePerGram,
         // Phase 1
         availableColors, defaultColor, availablePurities, defaultPurity,
         // Phase 2
@@ -386,6 +388,7 @@ class ProductService {
             // and the metal-rate cron never changes it; it says nothing about weight.
             weight: parseFloat(weight) || 0,
             fixedPrice: fixedPrice != null && fixedPrice !== '' ? parseFloat(fixedPrice) : null,
+            ratePerGram: ratePerGram != null && ratePerGram !== '' ? parseFloat(ratePerGram) : null,
             gemstone,
             dimensions,
             certification,
@@ -503,7 +506,7 @@ class ProductService {
         name, description, basePrice, categoryId, materialId, karatId,
         gemstone, weight, dimensions, stock, featured, isActive, sku,
         certification, images, tags, existingImageData, primaryImageUrl,
-        fixedPrice,
+        fixedPrice, ratePerGram,
         // Phase 1
         availableColors, defaultColor, availablePurities, defaultPurity,
         // Phase 2
@@ -530,6 +533,9 @@ class ProductService {
           updateData.fixedPrice = fp;
           // Weight is left alone here — it comes from the payload above like any other
           // field. Fixed price locks the price, not the weight.
+        }
+        if (ratePerGram !== undefined) {
+          updateData.ratePerGram = (ratePerGram === null || ratePerGram === '') ? null : parseFloat(ratePerGram);
         }
         if (dimensions !== undefined) updateData.dimensions = dimensions;
         if (stock !== undefined) updateData.stockQuantity = parseInt(stock);
